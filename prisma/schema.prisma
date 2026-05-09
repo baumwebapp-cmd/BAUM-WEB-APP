@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  email     String   @unique
+  password  String
+  rol       Rol
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proyectosGerente ProyectoGerente[]
+  clavesCreadas    Clave[]
+  planosSubidos    Plano[]
+  autorizaciones   AutorizacionInterna[]
+
+  @@index([rol])
+  @@index([activo])
+}
+
+model Proyecto {
+  id            Int             @id @default(autoincrement())
+  nombre        String
+  clienteNombre String
+  pinAcceso     String          @unique
+  estatus       EstatusProyecto @default(ACTIVO)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  gerentes ProyectoGerente[]
+  claves   Clave[]
+
+  @@index([estatus])
+}
+
+model ProyectoGerente {
+  id         Int      @id @default(autoincrement())
+  proyectoId Int
+  usuarioId  Int
+  createdAt  DateTime @default(now())
+
+  proyecto Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([proyectoId, usuarioId])
+  @@index([proyectoId])
+  @@index([usuarioId])
+}
+
+model Clave {
+  id          Int          @id @default(autoincrement())
+  proyectoId  Int
+  codigo      String
+  descripcion String
+  estatus     EstatusClave @default(BORRADOR)
+  creadoPorId Int
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  proyecto  Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  creadoPor Usuario  @relation(fields: [creadoPorId], references: [id])
+  planos    Plano[]
+
+  @@unique([proyectoId, codigo])
+  @@index([estatus])
+  @@index([proyectoId])
+}
+
+model Plano {
+  id          Int      @id @default(autoincrement())
+  claveId     Int
+  urlPdf      String   @db.Text
+  version     Int      @default(1)
+  subidoPorId Int
+  createdAt   DateTime @default(now())
+
+  clave                  Clave                 @relation(fields: [claveId], references: [id], onDelete: Cascade)
+  subidoPor              Usuario               @relation(fields: [subidoPorId], references: [id])
+  autorizacionesInternas AutorizacionInterna[]
+  autorizacionCliente    AutorizacionCliente?
+  notificaciones         Notificacion[]
+
+  @@unique([claveId, version])
+  @@index([claveId])
+}
+
+model AutorizacionInterna {
+  id          Int      @id @default(autoincrement())
+  planoId     Int
+  gerenteId   Int
+  decision    Decision
+  comentarios String?
+  createdAt   DateTime @default(now())
+
+  plano   Plano   @relation(fields: [planoId], references: [id], onDelete: Cascade)
+  gerente Usuario @relation(fields: [gerenteId], references: [id])
+
+  @@unique([planoId, gerenteId])
+  @@index([planoId])
+}
+
+model AutorizacionCliente {
+  id          Int      @id @default(autoincrement())
+  planoId     Int      @unique
+  decision    Decision
+  comentarios String?
+  firmadoPor  String
+  firmaBase64 String?  @db.Text
+  ipCliente   String?
+  createdAt   DateTime @default(now())
+
+  plano Plano @relation(fields: [planoId], references: [id], onDelete: Cascade)
+}
+
+model Notificacion {
+  id        Int      @id @default(autoincrement())
+  planoId   Int
+  tipo      String
+  leida     Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  plano Plano @relation(fields: [planoId], references: [id], onDelete: Cascade)
+}
+
+enum Rol {
+  GERENTE
+  DISENADOR
+  COSTOS
+  PRODUCCION
+}
+
+enum EstatusProyecto {
+  ACTIVO
+  PAUSADO
+  COMPLETADO
+}
+
+enum Decision {
+  APROBADO
+  RECHAZADO
+}
+
+enum EstatusClave {
+  BORRADOR
+  REVISION_INTERNA
+  ENVIADO
+  RECHAZADO
+  AUTORIZADO
+  LIBERADO
+  EN_PRODUCCION
+}
