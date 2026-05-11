@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  allowedDevOrigins: ['192.168.100.150'],
 
   images: {
     remotePatterns: [
@@ -31,5 +31,7 @@ const nextConfig = {
     ];
   },
 };
+
+
 
 module.exports = nextConfig;

@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
-const ROLES_VALIDOS = ["GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+const ROLES_VALIDOS_TODOS = ["DUENO", "SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+const ROLES_GESTIONABLES_POR_SUPERADMIN = ["GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
 
 const SELECT_USUARIO = {
   id: true,
@@ -16,20 +17,34 @@ const SELECT_USUARIO = {
   updatedAt: true,
 };
 
+function puedeGestionarUsuarios(rol) {
+  return rol === "DUENO" || rol === "SUPERADMIN";
+}
+
+function rolesVisiblesParaRol(rol) {
+  if (rol === "DUENO") return ROLES_VALIDOS_TODOS;
+  if (rol === "SUPERADMIN") return ROLES_GESTIONABLES_POR_SUPERADMIN;
+  return null;
+}
+
 export async function GET(req) {
   const sesion = await getServerSession(authOptions);
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (sesion.user.rol !== "GERENTE") {
-    return NextResponse.json({ error: "Solo gerentes pueden ver usuarios" }, { status: 403 });
+
+  const rolActual = sesion.user.rol;
+  const rolesVisibles = rolesVisiblesParaRol(rolActual);
+
+  if (!rolesVisibles) {
+    return NextResponse.json({ error: "Sin permiso para ver usuarios" }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);
-  const rol = searchParams.get("rol");
+  const rolFiltro = searchParams.get("rol");
   const soloActivos = searchParams.get("activos") === "true";
 
   try {
-    const where = {};
-    if (rol && ROLES_VALIDOS.includes(rol)) where.rol = rol;
+    const where = { rol: { in: rolesVisibles } };
+    if (rolFiltro && rolesVisibles.includes(rolFiltro)) where.rol = rolFiltro;
     if (soloActivos) where.activo = true;
 
     const usuarios = await prisma.usuario.findMany({
@@ -48,9 +63,13 @@ export async function GET(req) {
 export async function POST(req) {
   const sesion = await getServerSession(authOptions);
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (sesion.user.rol !== "GERENTE") {
-    return NextResponse.json({ error: "Solo gerentes pueden crear usuarios" }, { status: 403 });
+
+  const rolActual = sesion.user.rol;
+  if (!puedeGestionarUsuarios(rolActual)) {
+    return NextResponse.json({ error: "Sin permiso para crear usuarios" }, { status: 403 });
   }
+
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || req.headers.get("x-real-ip") || null;
 
   try {
     const body = await req.json();
@@ -61,8 +80,17 @@ export async function POST(req) {
     if (!password || password.length < 8) {
       return NextResponse.json({ error: "La contraseña debe tener al menos 8 caracteres" }, { status: 400 });
     }
-    if (!ROLES_VALIDOS.includes(rol)) {
-      return NextResponse.json({ error: "Rol inválido" }, { status: 400 });
+
+    const rolesPermitidos = rolActual === "DUENO"
+      ? ROLES_VALIDOS_TODOS.filter((r) => r !== "DUENO")
+      : ROLES_GESTIONABLES_POR_SUPERADMIN;
+
+    if (!rolesPermitidos.includes(rol)) {
+      return NextResponse.json({ error: "Rol inválido o sin permiso para asignarlo" }, { status: 400 });
+    }
+
+    if (rol === "SUPERADMIN" && rolActual !== "DUENO") {
+      return NextResponse.json({ error: "Solo el dueño puede crear superadmins" }, { status: 403 });
     }
 
     const emailNorm = email.trim().toLowerCase();
@@ -71,14 +99,20 @@ export async function POST(req) {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const usuario = await prisma.usuario.create({
-      data: {
-        nombre: nombre.trim(),
-        email: emailNorm,
-        password: passwordHash,
-        rol,
-      },
-      select: SELECT_USUARIO,
+    const usuario = await prisma.$transaction(async (tx) => {
+      const nuevo = await tx.usuario.create({
+        data: { nombre: nombre.trim(), email: emailNorm, password: passwordHash, rol },
+        select: SELECT_USUARIO,
+      });
+      await tx.auditoriaAdmin.create({
+        data: {
+          usuarioId: parseInt(sesion.user.id),
+          accion: "CREAR_USUARIO",
+          detalle: `Creó usuario ${emailNorm} con rol ${rol}`,
+          ip,
+        },
+      });
+      return nuevo;
     });
 
     return NextResponse.json(usuario, { status: 201 });

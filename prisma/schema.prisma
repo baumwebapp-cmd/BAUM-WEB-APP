@@ -20,6 +20,7 @@ model Usuario {
   clavesCreadas    Clave[]
   planosSubidos    Plano[]
   autorizaciones   AutorizacionInterna[]
+  auditoriaAdmin   AuditoriaAdmin[]
 
   @@index([rol])
   @@index([activo])
@@ -129,7 +130,23 @@ model Notificacion {
   plano Plano @relation(fields: [planoId], references: [id], onDelete: Cascade)
 }
 
+model AuditoriaAdmin {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  accion    String
+  detalle   String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@index([usuarioId])
+  @@index([createdAt])
+}
+
 enum Rol {
+  DUENO
+  SUPERADMIN
   GERENTE
   DISENADOR
   COSTOS

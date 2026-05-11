@@ -6,7 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   ArrowLeft, Pencil, RefreshCw, Plus, Upload, CheckCircle, X,
-  Send, Copy, ExternalLink, FileText, Clock, User, AlertTriangle, Link,
+  Copy, ExternalLink, FileText, Clock, User, AlertTriangle, Link,
+  Settings, Check, Minus,
 } from "lucide-react";
 
 function getAppUrl() {
@@ -15,14 +16,19 @@ function getAppUrl() {
   return "";
 }
 
+function formatFechaCorta(fecha) {
+  if (!fecha) return null;
+  return new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" });
+}
+
 const ESTATUS_CLAVE = {
-  BORRADOR:         { label: "Borrador",          color: "#6b7280", bg: "#f3f4f6" },
-  REVISION_INTERNA: { label: "Revisión interna",  color: "#92400e", bg: "#fef3c7" },
-  ENVIADO:          { label: "Enviado a cliente",  color: "#1e40af", bg: "#dbeafe" },
-  RECHAZADO:        { label: "Rechazado",          color: "#991b1b", bg: "#fee2e2" },
-  AUTORIZADO:       { label: "Autorizado",         color: "#166534", bg: "#dcfce7" },
-  LIBERADO:         { label: "Liberado",           color: "#155e75", bg: "#cffafe" },
-  EN_PRODUCCION:    { label: "En producción",      color: "#7c2d12", bg: "#ffedd5" },
+  BORRADOR:         { label: "Borrador",         color: "#6b7280", bg: "#f3f4f6" },
+  REVISION_INTERNA: { label: "Revisión interna", color: "#92400e", bg: "#fef3c7" },
+  ENVIADO:          { label: "Enviado a cliente", color: "#1e40af", bg: "#dbeafe" },
+  RECHAZADO:        { label: "Rechazado",         color: "#991b1b", bg: "#fee2e2" },
+  AUTORIZADO:       { label: "Autorizado",        color: "#166534", bg: "#dcfce7" },
+  LIBERADO:         { label: "Liberado",          color: "#155e75", bg: "#cffafe" },
+  EN_PRODUCCION:    { label: "En producción",     color: "#7c2d12", bg: "#ffedd5" },
 };
 
 const ESTATUS_PROYECTO = {
@@ -30,6 +36,110 @@ const ESTATUS_PROYECTO = {
   PAUSADO:    { label: "Pausado",    color: "#f59e0b" },
   COMPLETADO: { label: "Completado", color: "#6b7280" },
 };
+
+function calcularPipeline(clave, plano) {
+  const autInternas = plano?.autorizacionesInternas || [];
+  const autCliente = plano?.autorizacionCliente || null;
+  const rechazoInterno = autInternas.find((a) => a.decision === "RECHAZADO");
+  const rechazoCliente = autCliente?.decision === "RECHAZADO";
+  const aprobadosInternos = autInternas.filter((a) => a.decision === "APROBADO");
+
+  const nodo = (estado, nombre = null, fecha = null, comentario = null) => ({ estado, nombre, fecha, comentario });
+
+  switch (clave.estatus) {
+    case "BORRADOR":
+      return {
+        jefe:      nodo("PENDIENTE"),
+        cliente:   nodo("PENDIENTE"),
+        costos:    nodo("PENDIENTE"),
+        produccion: nodo("PENDIENTE"),
+      };
+
+    case "REVISION_INTERNA": {
+      const progreso = aprobadosInternos.length;
+      return {
+        jefe:      nodo("EN_PROCESO", progreso > 0 ? `${progreso} aprobado` : null),
+        cliente:   nodo("PENDIENTE"),
+        costos:    nodo("PENDIENTE"),
+        produccion: nodo("PENDIENTE"),
+      };
+    }
+
+    case "ENVIADO": {
+      const ultimo = aprobadosInternos.slice(-1)[0];
+      return {
+        jefe:      nodo("COMPLETADO", ultimo?.gerente?.nombre?.split(" ")[0] || null, formatFechaCorta(ultimo?.createdAt)),
+        cliente:   nodo("EN_PROCESO"),
+        costos:    nodo("PENDIENTE"),
+        produccion: nodo("PENDIENTE"),
+      };
+    }
+
+    case "RECHAZADO": {
+      if (rechazoInterno) {
+        return {
+          jefe:      nodo("RECHAZADO", rechazoInterno.gerente?.nombre?.split(" ")[0], formatFechaCorta(rechazoInterno.createdAt), rechazoInterno.comentarios),
+          cliente:   nodo("PENDIENTE"),
+          costos:    nodo("PENDIENTE"),
+          produccion: nodo("PENDIENTE"),
+        };
+      }
+      if (rechazoCliente) {
+        const ultimo = aprobadosInternos.slice(-1)[0];
+        return {
+          jefe:      nodo("COMPLETADO", ultimo?.gerente?.nombre?.split(" ")[0] || null, formatFechaCorta(ultimo?.createdAt)),
+          cliente:   nodo("RECHAZADO", autCliente.firmadoPor, formatFechaCorta(autCliente.createdAt), autCliente.comentarios),
+          costos:    nodo("PENDIENTE"),
+          produccion: nodo("PENDIENTE"),
+        };
+      }
+      return {
+        jefe:      nodo("RECHAZADO"),
+        cliente:   nodo("PENDIENTE"),
+        costos:    nodo("PENDIENTE"),
+        produccion: nodo("PENDIENTE"),
+      };
+    }
+
+    case "AUTORIZADO": {
+      const ultimo = aprobadosInternos.slice(-1)[0];
+      return {
+        jefe:      nodo("COMPLETADO", ultimo?.gerente?.nombre?.split(" ")[0] || null, formatFechaCorta(ultimo?.createdAt)),
+        cliente:   nodo("COMPLETADO", autCliente?.firmadoPor, formatFechaCorta(autCliente?.createdAt)),
+        costos:    nodo("EN_PROCESO"),
+        produccion: nodo("PENDIENTE"),
+      };
+    }
+
+    case "LIBERADO": {
+      const ultimo = aprobadosInternos.slice(-1)[0];
+      return {
+        jefe:      nodo("COMPLETADO", ultimo?.gerente?.nombre?.split(" ")[0] || null, formatFechaCorta(ultimo?.createdAt)),
+        cliente:   nodo("COMPLETADO", autCliente?.firmadoPor, formatFechaCorta(autCliente?.createdAt)),
+        costos:    nodo("COMPLETADO"),
+        produccion: nodo("EN_PROCESO"),
+      };
+    }
+
+    case "EN_PRODUCCION": {
+      const ultimo = aprobadosInternos.slice(-1)[0];
+      return {
+        jefe:      nodo("COMPLETADO", ultimo?.gerente?.nombre?.split(" ")[0] || null, formatFechaCorta(ultimo?.createdAt)),
+        cliente:   nodo("COMPLETADO", autCliente?.firmadoPor, formatFechaCorta(autCliente?.createdAt)),
+        costos:    nodo("COMPLETADO"),
+        produccion: nodo("COMPLETADO"),
+      };
+    }
+
+    default:
+      return {
+        jefe:      nodo("PENDIENTE"),
+        cliente:   nodo("PENDIENTE"),
+        costos:    nodo("PENDIENTE"),
+        produccion: nodo("PENDIENTE"),
+      };
+  }
+}
 
 export default function ProyectoDetallePage() {
   const { id } = useParams();
@@ -47,6 +157,7 @@ export default function ProyectoDetallePage() {
   const [modalEditarProyecto, setModalEditarProyecto] = useState(false);
   const [modalCrearClave, setModalCrearClave] = useState(false);
   const [modalSubirPlano, setModalSubirPlano] = useState(null);
+  const [esMobil, setEsMobil] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -69,7 +180,18 @@ export default function ProyectoDetallePage() {
     return () => clearInterval(intervalo);
   }, [cargar]);
 
-  if (cargando) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 300 }}><div className="spinner" /></div>;
+  useEffect(() => {
+    function actualizar() { setEsMobil(window.innerWidth < 768); }
+    actualizar();
+    window.addEventListener("resize", actualizar);
+    return () => window.removeEventListener("resize", actualizar);
+  }, []);
+
+  if (cargando) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 300 }}>
+      <div className="spinner" />
+    </div>
+  );
   if (error) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: 300, justifyContent: "center", gap: 16 }}>
       <AlertTriangle size={36} style={{ color: "#ef4444" }} />
@@ -85,8 +207,7 @@ export default function ProyectoDetallePage() {
   const gerentesProyecto = proyecto.gerentes?.map((g) => g.usuario) || [];
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-      {/* Banner link cliente */}
+    <div style={{ maxWidth: 1300, margin: "0 auto" }}>
       {clienteUrl && (
         <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 10, padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <Link size={18} style={{ color: "#0369a1", flexShrink: 0 }} />
@@ -94,7 +215,7 @@ export default function ProyectoDetallePage() {
             <p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 700, color: "#0369a1" }}>¡Todos los gerentes autorizaron! Comparte este link con el cliente:</p>
             <span style={{ fontSize: 12, color: "#0369a1", wordBreak: "break-all" }}>{clienteUrl}</span>
           </div>
-          <button onClick={() => { navigator.clipboard.writeText(clienteUrl); }}
+          <button onClick={() => navigator.clipboard.writeText(clienteUrl)}
             style={{ background: "#0369a1", border: "none", borderRadius: 6, padding: "7px 14px", color: "#ffffff", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
             <Copy size={13} /> Copiar
           </button>
@@ -148,9 +269,7 @@ export default function ProyectoDetallePage() {
             <PinDisplay pin={proyecto.pinAcceso} onCambiar={() => setModalPin(true)} />
           )}
         </div>
-
         <div style={{ height: 1, background: "#f0f0f0" }} />
-
         <div style={{ padding: "12px 24px", display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
           <GrupoUsuarios titulo="Gerentes" usuarios={gerentesProyecto} />
           {esGerente && proyecto.pinAcceso && (
@@ -176,36 +295,40 @@ export default function ProyectoDetallePage() {
           <FileText size={32} style={{ opacity: 0.25, marginBottom: 10 }} />
           <p style={{ margin: 0 }}>Sin claves registradas aún.</p>
         </div>
+      ) : esMobil ? (
+        <div>
+          {proyecto.claves.map((clave) => (
+            <CardClave
+              key={clave.id}
+              clave={clave}
+              rol={rol}
+              usuarioId={usuarioId}
+              gerentesProyecto={gerentesProyecto}
+              pinAcceso={proyecto.pinAcceso}
+              puedeSubir={puedeSubir}
+              onSubirPlano={() => setModalSubirPlano(clave.id)}
+              onRefresh={cargar}
+              onClienteUrl={setClienteUrl}
+            />
+          ))}
+        </div>
       ) : (
         <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse", tableLayout: "fixed" }}>
-              <colgroup>
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "12%" }} />
-                <col style={{ width: "24%" }} />
-                <col style={{ width: "20%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "10%" }} />
-              </colgroup>
+            <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ background: "#fafafa", borderBottom: "2px solid #e5e5e5" }}>
-                  <th style={sTh}>CLAVE</th>
-                  <th style={sTh}>PLANO</th>
-                  <th style={sTh}>JEFE DE ÁREA</th>
-                  <th style={sTh}>CLIENTE</th>
-                  <th style={sTh}>COSTOS</th>
-                  <th style={sTh}>PRODUCCIÓN</th>
-                  <th style={{ ...sTh, textAlign: "right", paddingRight: 16 }}>ACCIÓN</th>
+                <tr style={{ background: "#ffffff", borderBottom: "1px solid #e5e5e5" }}>
+                  <th style={{ ...sTh, minWidth: 130 }}>CLAVE</th>
+                  <th style={{ ...sTh, minWidth: 160 }}>DESCRIPCIÓN</th>
+                  <th style={{ ...sTh, minWidth: 170 }}>PLANO</th>
+                  <th style={{ ...sTh, minWidth: 420 }}>FLUJO</th>
                 </tr>
               </thead>
               <tbody>
-                {proyecto.claves.map((clave, i) => (
+                {proyecto.claves.map((clave) => (
                   <FilaClave
                     key={clave.id}
                     clave={clave}
-                    par={i % 2 === 0}
                     rol={rol}
                     usuarioId={usuarioId}
                     gerentesProyecto={gerentesProyecto}
@@ -238,182 +361,93 @@ export default function ProyectoDetallePage() {
   );
 }
 
-/* ── Fila de clave en tabla ── */
-function FilaClave({ clave, par, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSubir, onSubirPlano, onRefresh, onClienteUrl }) {
+/* ── Pipeline simplificado para móvil ── */
+function PipelineSimple({ pipeline, jefeClicable, costosClicable, produccionClicable, onClickJefe, onClickCostos, onClickProduccion, onVerComentario }) {
+  const COLOR_NODO = { PENDIENTE: "#e5e7eb", EN_PROCESO: "#c9a84c", COMPLETADO: "#10b981", RECHAZADO: "#ef4444" };
+  const NODOS = [
+    { key: "jefe",       label: "Jefe área",  nodo: pipeline.jefe,       clicable: jefeClicable,       onClick: onClickJefe },
+    { key: "cliente",    label: "Cliente",    nodo: pipeline.cliente,    clicable: false },
+    { key: "costos",     label: "Costos",     nodo: pipeline.costos,     clicable: costosClicable,     onClick: onClickCostos },
+    { key: "produccion", label: "Producción", nodo: pipeline.produccion, clicable: produccionClicable, onClick: onClickProduccion },
+  ];
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start" }}>
+      {NODOS.map(({ key, label, nodo, clicable, onClick }, idx) => (
+        <div key={key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+          {idx > 0 && (
+            <div style={{ position: "absolute", right: "50%", top: 9, left: 0, height: 2, background: NODOS[idx - 1].nodo.estado === "COMPLETADO" ? "#10b981" : "#e5e7eb" }} />
+          )}
+          {idx < 3 && (
+            <div style={{ position: "absolute", left: "50%", top: 9, right: 0, height: 2, background: nodo.estado === "COMPLETADO" ? "#10b981" : "#e5e7eb" }} />
+          )}
+          <div
+            onClick={clicable ? onClick : undefined}
+            style={{
+              width: 20, height: 20,
+              borderRadius: "50%",
+              background: COLOR_NODO[nodo.estado] || "#e5e7eb",
+              border: clicable ? "2px solid #212121" : "2px solid transparent",
+              cursor: clicable ? "pointer" : "default",
+              position: "relative",
+              zIndex: 1,
+              flexShrink: 0,
+            }}
+          />
+          <div style={{ fontSize: 9, color: "#9ca3af", textAlign: "center", marginTop: 4, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", lineHeight: 1.2 }}>
+            {label}
+          </div>
+          {nodo.comentario && (
+            <button
+              onClick={() => onVerComentario({ texto: nodo.comentario, autor: nodo.nombre, fecha: null })}
+              style={{ marginTop: 2, background: "none", border: "none", color: "#ef4444", fontSize: 9, fontWeight: 600, cursor: "pointer", padding: 0 }}
+            >
+              Ver motivo
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Card de clave para móvil ── */
+function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSubir, onSubirPlano, onRefresh, onClienteUrl }) {
   const [accionando, setAccionando] = useState(false);
   const [toast, setToast] = useState(null);
-  const [modalRechazo, setModalRechazo] = useState(false);
   const [modalComentario, setModalComentario] = useState(null);
+  const [modalJefe, setModalJefe] = useState(false);
+  const [modalCostos, setModalCostos] = useState(false);
+  const [modalProduccion, setModalProduccion] = useState(false);
 
   const plano = clave.planos?.[0] || null;
-  const estConf = ESTATUS_CLAVE[clave.estatus] || ESTATUS_CLAVE.BORRADOR;
   const autInternas = plano?.autorizacionesInternas || [];
-  const totalGerentes = gerentesProyecto.length;
-  const totalAutorizados = autInternas.length;
-  const autorizadoPorMi = autInternas.some((a) => a.gerente?.id === usuarioId);
+  const autorizadoPorMi = autInternas.some((a) => a.gerente?.id === usuarioId && a.decision === "APROBADO");
 
-  const autCliente = plano?.autorizacionCliente || null;
-  const clienteAprobo = autCliente?.decision === "APROBADO";
+  const pipeline = calcularPipeline(clave, plano);
 
-  async function accion(url, method = "POST", body = {}, mensajeExito = "¡Acción completada!") {
+  const jefeClicable = rol === "GERENTE" && pipeline.jefe.estado === "EN_PROCESO" && !autorizadoPorMi;
+  const costosClicable = rol === "COSTOS" && pipeline.costos.estado === "EN_PROCESO";
+  const produccionClicable = rol === "PRODUCCION" && pipeline.produccion.estado === "EN_PROCESO";
+
+  async function ejecutarAccion(url, method, body, mensajeExito) {
     setAccionando(true);
     try {
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
-      if (!res.ok) {
-        setToast({ tipo: "error", titulo: "Error al procesar", mensaje: data.error || "Error" });
-        return;
-      }
+      if (!res.ok) { setToast({ tipo: "error", titulo: "Error al procesar", mensaje: data.error || "Error" }); return false; }
       if (data.clienteUrl) onClienteUrl(data.clienteUrl);
       setToast({ tipo: "exito", titulo: mensajeExito });
       setTimeout(() => { setToast(null); onRefresh(); }, 2000);
+      return true;
     } catch {
-      setToast({ tipo: "error", titulo: "Error al procesar", mensaje: "Error de conexión" });
-    } finally {
-      setAccionando(false);
-    }
+      setToast({ tipo: "error", titulo: "Error de conexión", mensaje: "" });
+      return false;
+    } finally { setAccionando(false); }
   }
 
-  /* Columna JEFE DE ÁREA */
-  function CeldaJefe() {
-    if (!plano) return <span style={sVacio}>—</span>;
-    if (clave.estatus === "REVISION_INTERNA") {
-      return (
-        <div>
-          <Badge color="#991b1b" bg="#fee2e2">PENDIENTE {totalAutorizados}/{totalGerentes}</Badge>
-          <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {gerentesProyecto.map((g) => {
-              const ok = autInternas.some((a) => a.gerente?.id === g.id);
-              return (
-                <span key={g.id} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 10, background: ok ? "#dcfce7" : "#f3f4f6", color: ok ? "#166534" : "#888888", border: `1px solid ${ok ? "#86efac" : "#e5e5e5"}` }}>
-                  {g.nombre.split(" ")[0]}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-    if (clave.estatus === "RECHAZADO") {
-      const rechazoInterno = autInternas.find((a) => a.decision === "RECHAZADO");
-      if (rechazoInterno) {
-        return (
-          <div>
-            <Badge color="#991b1b" bg="#fee2e2">RECHAZADO INTERNAMENTE</Badge>
-            <span style={{ fontSize: 10, color: "#555555", display: "block", marginTop: 3 }}>
-              por {rechazoInterno.gerente?.nombre}
-            </span>
-            {rechazoInterno.comentarios && (
-              <ComentarioRechazo
-                texto={rechazoInterno.comentarios}
-                onVerMas={() => setModalComentario({ texto: rechazoInterno.comentarios, autor: rechazoInterno.gerente?.nombre, fecha: rechazoInterno.createdAt })}
-              />
-            )}
-          </div>
-        );
-      }
-      return (
-        <div>
-          <Badge color="#991b1b" bg="#fee2e2">RECHAZADO POR CLIENTE</Badge>
-          {autCliente?.comentarios && (
-            <ComentarioRechazo
-              texto={autCliente.comentarios}
-              onVerMas={() => setModalComentario({ texto: autCliente.comentarios, autor: autCliente.firmadoPor, fecha: autCliente.createdAt })}
-            />
-          )}
-        </div>
-      );
-    }
-    return <Badge color="#166534" bg="#dcfce7"><CheckCircle size={10} style={{ display: "inline", marginRight: 3 }} />Autorizado {totalAutorizados}/{totalGerentes}</Badge>;
-  }
-
-  /* Columna CLIENTE */
-  function CeldaCliente() {
-    const visibles = ["ENVIADO", "RECHAZADO", "AUTORIZADO", "LIBERADO", "EN_PRODUCCION"];
-    if (!visibles.includes(clave.estatus)) return <span style={sVacio}>—</span>;
-    if (clave.estatus === "ENVIADO") return <Badge color="#1e40af" bg="#dbeafe"><Clock size={10} style={{ display: "inline", marginRight: 3 }} />Pendiente</Badge>;
-    if (clave.estatus === "RECHAZADO") {
-      return (
-        <div>
-          <Badge color="#991b1b" bg="#fee2e2">Rechazado</Badge>
-          {autCliente?.comentarios && (
-            <ComentarioRechazo
-              texto={autCliente.comentarios}
-              onVerMas={() => setModalComentario({ texto: autCliente.comentarios, autor: autCliente.firmadoPor, fecha: autCliente.createdAt })}
-            />
-          )}
-          {autCliente?.firmadoPor && <span style={{ fontSize: 10, color: "#888888", display: "block", marginTop: 3 }}>{autCliente.firmadoPor}</span>}
-        </div>
-      );
-    }
-    return (
-      <div>
-        <Badge color="#166534" bg="#dcfce7"><CheckCircle size={10} style={{ display: "inline", marginRight: 3 }} />Autorizado</Badge>
-        {clienteAprobo && autCliente?.firmadoPor && (
-          <span style={{ fontSize: 10, color: "#888888", display: "block", marginTop: 3 }}>{autCliente.firmadoPor}</span>
-        )}
-      </div>
-    );
-  }
-
-  /* Columna COSTOS */
-  function CeldaCostos() {
-    const visibles = ["AUTORIZADO", "LIBERADO", "EN_PRODUCCION"];
-    if (!visibles.includes(clave.estatus)) return <span style={sVacio}>—</span>;
-    if (clave.estatus === "AUTORIZADO") return <Badge color="#92400e" bg="#fef3c7"><Clock size={10} style={{ display: "inline", marginRight: 3 }} />Pendiente</Badge>;
-    return <Badge color="#155e75" bg="#cffafe"><CheckCircle size={10} style={{ display: "inline", marginRight: 3 }} />Liberado</Badge>;
-  }
-
-  /* Columna PRODUCCIÓN */
-  function CeldaProduccion() {
-    if (!["LIBERADO", "EN_PRODUCCION"].includes(clave.estatus)) return <span style={sVacio}>—</span>;
-    if (clave.estatus === "LIBERADO") return <Badge color="#155e75" bg="#cffafe">Liberado</Badge>;
-    return <Badge color="#7c2d12" bg="#ffedd5">En producción</Badge>;
-  }
-
-  /* Botones de acción */
-  const botones = [];
-
-  if (puedeSubir && !plano && clave.estatus === "BORRADOR") {
-    botones.push(
-      <BtnAccion key="subir" color="#ffffff" bg="#3b82f6" onClick={onSubirPlano} disabled={accionando}>
-        <Upload size={12} /> Subir diseño
-      </BtnAccion>
-    );
-  }
-  if (puedeSubir && plano && (clave.estatus === "REVISION_INTERNA" || clave.estatus === "RECHAZADO")) {
-    botones.push(
-      <BtnAccion key="resubir" color="#ffffff" bg="#ef4444" onClick={onSubirPlano} disabled={accionando}>
-        <Upload size={12} /> Subir nuevo
-      </BtnAccion>
-    );
-  }
-  if (rol === "GERENTE" && plano && clave.estatus === "REVISION_INTERNA" && !autorizadoPorMi) {
-    botones.push(
-      <BtnAccion key="auth" color="#212121" bg="#c9a84c" onClick={() => accion(`/api/planos/${plano.id}/autorizar-interno`, "POST", {}, "¡Plano autorizado internamente!")} disabled={accionando}>
-        <CheckCircle size={12} /> Autorizar
-      </BtnAccion>
-    );
-    botones.push(
-      <BtnAccion key="rechazar" color="#ffffff" bg="#ef4444" onClick={() => setModalRechazo(true)} disabled={accionando}>
-        <X size={12} /> Rechazar
-      </BtnAccion>
-    );
-  }
-  if (rol === "COSTOS" && clave.estatus === "AUTORIZADO") {
-    botones.push(
-      <BtnAccion key="liberar" color="#ffffff" bg="#0e7490" onClick={() => accion(`/api/planos/${plano?.id}/liberar`, "POST", {}, "¡Plano liberado a producción!")} disabled={accionando}>
-        <Send size={12} /> Liberar
-      </BtnAccion>
-    );
-  }
-  if (rol === "PRODUCCION" && clave.estatus === "LIBERADO") {
-    botones.push(
-      <BtnAccion key="prod" color="#ffffff" bg="#ea580c" onClick={() => accion(`/api/claves/${clave.id}`, "PATCH", { estatus: "EN_PRODUCCION" }, "¡Marcado en producción!")} disabled={accionando}>
-        <CheckCircle size={12} /> En producción
-      </BtnAccion>
-    );
-  }
+  const puedeSubirPrimero = puedeSubir && !plano && clave.estatus === "BORRADOR";
+  const puedeSubirNuevo = puedeSubir && plano && clave.estatus === "RECHAZADO";
+  const cfg = ESTATUS_CLAVE[clave.estatus] || { label: clave.estatus, color: "#6b7280", bg: "#f3f4f6" };
 
   return (
     <>
@@ -421,128 +455,487 @@ function FilaClave({ clave, par, rol, usuarioId, gerentesProyecto, pinAcceso, pu
       {modalComentario && (
         <Portal><ModalComentarioRechazo comentario={modalComentario} onCerrar={() => setModalComentario(null)} /></Portal>
       )}
-      {modalRechazo && plano && (
+      {modalJefe && plano && (
         <Portal>
-          <ModalRechazoInterno
-            planoId={plano.id}
-            claveCodigo={clave.codigo}
-            onCerrar={() => setModalRechazo(false)}
-            onConfirmado={() => {
-              setModalRechazo(false);
-              setToast({ tipo: "exito", titulo: "Plano rechazado. El diseñador deberá subir una nueva versión." });
+          <ModalAccionJefe
+            plano={plano}
+            clave={clave}
+            autorizadoPorMi={autorizadoPorMi}
+            onCerrar={() => setModalJefe(false)}
+            onAutorizar={async () => {
+              const ok = await ejecutarAccion(`/api/planos/${plano.id}/autorizar-interno`, "POST", {}, "¡Plano autorizado internamente!");
+              if (ok) setModalJefe(false);
+            }}
+            onRechazado={() => {
+              setModalJefe(false);
+              setToast({ tipo: "exito", titulo: "Plano rechazado. El diseñador deberá corregir." });
               setTimeout(() => { setToast(null); onRefresh(); }, 2500);
             }}
           />
         </Portal>
       )}
-      <tr style={{ background: par ? "#ffffff" : "#fafafa", borderBottom: "1px solid #f0f0f0", verticalAlign: "top" }}>
-        {/* CLAVE */}
-        <td style={sTd}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: "#212121" }}>{clave.codigo}</div>
-          <div style={{ fontSize: 11, color: "#888888", marginTop: 2 }}>{clave.descripcion}</div>
-          <span style={{ display: "inline-block", marginTop: 5, fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 8, background: estConf.bg, color: estConf.color }}>
-            {estConf.label}
+      {modalCostos && plano && (
+        <Portal>
+          <ModalAccionCostos
+            clave={clave}
+            ejecutando={accionando}
+            onCerrar={() => setModalCostos(false)}
+            onConfirmado={async () => {
+              const ok = await ejecutarAccion(`/api/planos/${plano.id}/liberar`, "POST", {}, "¡Plano liberado a producción!");
+              if (ok) setModalCostos(false);
+            }}
+          />
+        </Portal>
+      )}
+      {modalProduccion && (
+        <Portal>
+          <ModalAccionProduccion
+            clave={clave}
+            ejecutando={accionando}
+            onCerrar={() => setModalProduccion(false)}
+            onConfirmado={async () => {
+              const ok = await ejecutarAccion(`/api/claves/${clave.id}`, "PATCH", { estatus: "EN_PRODUCCION" }, "¡Marcado en producción!");
+              if (ok) setModalProduccion(false);
+            }}
+          />
+        </Portal>
+      )}
+
+      <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: 16, marginBottom: 8 }}>
+        {/* Fila 1: código + badge */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontWeight: 700, fontSize: 15, color: "#212121" }}>{clave.codigo}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 6, background: cfg.bg, color: cfg.color }}>
+            {cfg.label}
           </span>
+        </div>
+
+        {/* Descripción */}
+        {clave.descripcion && (
+          <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 10px", lineHeight: 1.5 }}>
+            {clave.descripcion}
+          </p>
+        )}
+
+        {/* Info del plano */}
+        {plano ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#212121" }}>v{plano.version}</span>
+            {plano.subidoPor?.nombre && (
+              <span style={{ fontSize: 11, color: "#6b7280" }}>{plano.subidoPor.nombre}</span>
+            )}
+            <span style={{ fontSize: 11, color: "#9ca3af" }}>
+              {new Date(plano.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" })}
+            </span>
+            <a href={plano.urlPdf} target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "#c9a84c", textDecoration: "none", padding: "2px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 5 }}>
+              <ExternalLink size={10} /> Ver PDF
+            </a>
+          </div>
+        ) : (
+          <p style={{ fontSize: 12, color: "#9ca3af", margin: "0 0 14px" }}>Sin plano</p>
+        )}
+
+        {/* Pipeline simplificado */}
+        <PipelineSimple
+          pipeline={pipeline}
+          jefeClicable={jefeClicable}
+          costosClicable={costosClicable}
+          produccionClicable={produccionClicable}
+          onClickJefe={() => setModalJefe(true)}
+          onClickCostos={() => setModalCostos(true)}
+          onClickProduccion={() => setModalProduccion(true)}
+          onVerComentario={setModalComentario}
+        />
+
+        {/* Botón de acción */}
+        {(puedeSubirPrimero || puedeSubirNuevo || jefeClicable || costosClicable || produccionClicable) && (
+          <div style={{ marginTop: 14 }}>
+            {puedeSubirPrimero && (
+              <button onClick={onSubirPlano} style={{ ...sBtnPlano("#3b82f6"), width: "100%", justifyContent: "center", padding: "9px 0" }}>
+                <Upload size={13} /> Subir plano
+              </button>
+            )}
+            {puedeSubirNuevo && (
+              <button onClick={onSubirPlano} style={{ ...sBtnPlano("#ef4444"), width: "100%", justifyContent: "center", padding: "9px 0" }}>
+                <Upload size={13} /> Subir nuevo plano
+              </button>
+            )}
+            {jefeClicable && (
+              <button onClick={() => setModalJefe(true)} style={{ ...sBtnPlano("#c9a84c"), width: "100%", justifyContent: "center", padding: "9px 0", color: "#212121" }}>
+                <CheckCircle size={13} /> Revisar plano
+              </button>
+            )}
+            {costosClicable && (
+              <button onClick={() => setModalCostos(true)} style={{ ...sBtnPlano("#c9a84c"), width: "100%", justifyContent: "center", padding: "9px 0", color: "#212121" }}>
+                <CheckCircle size={13} /> Liberar a producción
+              </button>
+            )}
+            {produccionClicable && (
+              <button onClick={() => setModalProduccion(true)} style={{ ...sBtnPlano("#212121"), width: "100%", justifyContent: "center", padding: "9px 0" }}>
+                <CheckCircle size={13} /> Marcar en producción
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ── Fila de clave rediseñada ── */
+function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSubir, onSubirPlano, onRefresh, onClienteUrl }) {
+  const [accionando, setAccionando] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [modalComentario, setModalComentario] = useState(null);
+  const [modalJefe, setModalJefe] = useState(false);
+  const [modalCostos, setModalCostos] = useState(false);
+  const [modalProduccion, setModalProduccion] = useState(false);
+
+  const plano = clave.planos?.[0] || null;
+  const autInternas = plano?.autorizacionesInternas || [];
+  const autCliente = plano?.autorizacionCliente || null;
+  const autorizadoPorMi = autInternas.some((a) => a.gerente?.id === usuarioId && a.decision === "APROBADO");
+
+  const pipeline = calcularPipeline(clave, plano);
+
+  const jefeClicable = rol === "GERENTE" && pipeline.jefe.estado === "EN_PROCESO" && !autorizadoPorMi;
+  const costosClicable = rol === "COSTOS" && pipeline.costos.estado === "EN_PROCESO";
+  const produccionClicable = rol === "PRODUCCION" && pipeline.produccion.estado === "EN_PROCESO";
+
+  async function ejecutarAccion(url, method, body, mensajeExito) {
+    setAccionando(true);
+    try {
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) {
+        setToast({ tipo: "error", titulo: "Error al procesar", mensaje: data.error || "Error" });
+        return false;
+      }
+      if (data.clienteUrl) onClienteUrl(data.clienteUrl);
+      setToast({ tipo: "exito", titulo: mensajeExito });
+      setTimeout(() => { setToast(null); onRefresh(); }, 2000);
+      return true;
+    } catch {
+      setToast({ tipo: "error", titulo: "Error de conexión", mensaje: "" });
+      return false;
+    } finally {
+      setAccionando(false);
+    }
+  }
+
+  const puedeSubirPrimero = puedeSubir && !plano && clave.estatus === "BORRADOR";
+  const puedeSubirNuevo = puedeSubir && plano && clave.estatus === "RECHAZADO";
+
+  return (
+    <>
+      {toast && <Portal><ModalConfirmacion toast={toast} onCerrar={() => setToast(null)} /></Portal>}
+      {modalComentario && (
+        <Portal><ModalComentarioRechazo comentario={modalComentario} onCerrar={() => setModalComentario(null)} /></Portal>
+      )}
+      {modalJefe && plano && (
+        <Portal>
+          <ModalAccionJefe
+            plano={plano}
+            clave={clave}
+            autorizadoPorMi={autorizadoPorMi}
+            onCerrar={() => setModalJefe(false)}
+            onAutorizar={async () => {
+              const ok = await ejecutarAccion(`/api/planos/${plano.id}/autorizar-interno`, "POST", {}, "¡Plano autorizado internamente!");
+              if (ok) setModalJefe(false);
+            }}
+            onRechazado={() => {
+              setModalJefe(false);
+              setToast({ tipo: "exito", titulo: "Plano rechazado. El diseñador deberá corregir." });
+              setTimeout(() => { setToast(null); onRefresh(); }, 2500);
+            }}
+          />
+        </Portal>
+      )}
+      {modalCostos && plano && (
+        <Portal>
+          <ModalAccionCostos
+            clave={clave}
+            ejecutando={accionando}
+            onCerrar={() => setModalCostos(false)}
+            onConfirmado={async () => {
+              const ok = await ejecutarAccion(`/api/planos/${plano.id}/liberar`, "POST", {}, "¡Plano liberado a producción!");
+              if (ok) setModalCostos(false);
+            }}
+          />
+        </Portal>
+      )}
+      {modalProduccion && (
+        <Portal>
+          <ModalAccionProduccion
+            clave={clave}
+            ejecutando={accionando}
+            onCerrar={() => setModalProduccion(false)}
+            onConfirmado={async () => {
+              const ok = await ejecutarAccion(`/api/claves/${clave.id}`, "PATCH", { estatus: "EN_PRODUCCION" }, "¡Marcado en producción!");
+              if (ok) setModalProduccion(false);
+            }}
+          />
+        </Portal>
+      )}
+
+      <tr style={{ background: "#ffffff", borderBottom: "1px solid #f3f4f6", verticalAlign: "top" }}>
+        {/* CLAVE */}
+        <td style={{ ...sTd, paddingLeft: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#212121" }}>{clave.codigo}</div>
+          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>
+            {clave.descripcion}
+          </div>
+          <span style={{ display: "inline-block", marginTop: 6, fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 6, background: ESTATUS_CLAVE[clave.estatus]?.bg || "#f3f4f6", color: ESTATUS_CLAVE[clave.estatus]?.color || "#6b7280" }}>
+            {ESTATUS_CLAVE[clave.estatus]?.label || clave.estatus}
+          </span>
+        </td>
+
+        {/* DESCRIPCIÓN */}
+        <td style={sTd}>
+          <DescripcionClave texto={clave.descripcion} codigo={clave.codigo} />
         </td>
 
         {/* PLANO */}
         <td style={sTd}>
           {plano ? (
             <div>
-              <div style={{ fontSize: 12, color: "#212121", fontWeight: 600 }}>v{plano.version}</div>
-              <div style={{ fontSize: 11, color: "#888888" }}>{plano.subidoPor?.nombre}</div>
-              <div style={{ fontSize: 10, color: "#aaaaaa", marginTop: 2 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#212121" }}>v{plano.version}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>{plano.subidoPor?.nombre}</div>
+              <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>
                 {new Date(plano.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" })}
               </div>
               <a href={plano.urlPdf} target="_blank" rel="noopener noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 5, fontSize: 11, color: "#c9a84c", textDecoration: "none", padding: "2px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 5 }}>
+                style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 11, color: "#c9a84c", textDecoration: "none", padding: "2px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 5 }}>
                 <ExternalLink size={10} /> Ver PDF
               </a>
+              {puedeSubirNuevo && (
+                <div style={{ marginTop: 6 }}>
+                  <button onClick={onSubirPlano} style={sBtnPlano("#ef4444")}>
+                    <Upload size={11} /> Subir nuevo
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <span style={sVacio}>Sin plano</span>
+            <div>
+              <span style={{ color: "#9ca3af", fontSize: 13 }}>Sin plano</span>
+              {puedeSubirPrimero && (
+                <div style={{ marginTop: 8 }}>
+                  <button onClick={onSubirPlano} style={sBtnPlano("#3b82f6")}>
+                    <Upload size={11} /> Subir plano
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </td>
 
-        {/* JEFE DE ÁREA */}
-        <td style={sTd}><CeldaJefe /></td>
-
-        {/* CLIENTE */}
-        <td style={sTd}>
-          <CeldaCliente />
-          {clave.estatus === "ENVIADO" && pinAcceso && (
-            <a href={`${getAppUrl()}/cliente/${pinAcceso}`} target="_blank" rel="noopener noreferrer"
-              style={{ display: "inline-flex", alignItems: "center", gap: 3, marginTop: 5, fontSize: 10, color: "#0369a1", textDecoration: "none" }}>
-              <Link size={9} /> Ver portal
-            </a>
-          )}
-        </td>
-
-        {/* COSTOS */}
-        <td style={sTd}><CeldaCostos /></td>
-
-        {/* PRODUCCIÓN */}
-        <td style={sTd}><CeldaProduccion /></td>
-
-        {/* ACCIÓN */}
-        <td style={{ ...sTd, textAlign: "right", paddingRight: 14 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end" }}>
-            {botones}
-            {accionando && <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />}
-          </div>
+        {/* FLUJO */}
+        <td style={{ ...sTd, paddingRight: 20 }}>
+          <PipelineVisual
+            pipeline={pipeline}
+            jefeClicable={jefeClicable}
+            costosClicable={costosClicable}
+            produccionClicable={produccionClicable}
+            onClickJefe={() => setModalJefe(true)}
+            onClickCostos={() => setModalCostos(true)}
+            onClickProduccion={() => setModalProduccion(true)}
+            onVerComentario={setModalComentario}
+          />
         </td>
       </tr>
     </>
   );
 }
 
-function ModalConfirmacion({ toast, onCerrar }) {
-  const esExito = toast.tipo === "exito";
-  const color = esExito ? "#10b981" : "#ef4444";
-  const bgCirculo = esExito ? "#dcfce7" : "#fee2e2";
+/* ── Pipeline visual ── */
+function PipelineVisual({ pipeline, jefeClicable, costosClicable, produccionClicable, onClickJefe, onClickCostos, onClickProduccion, onVerComentario }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", padding: "8px 0" }}>
+      <NodoPipeline
+        titulo="Jefe área"
+        estado={pipeline.jefe.estado}
+        nombre={pipeline.jefe.nombre}
+        fecha={pipeline.jefe.fecha}
+        comentario={pipeline.jefe.comentario}
+        clicable={jefeClicable}
+        onClick={onClickJefe}
+        onVerComentario={pipeline.jefe.comentario ? () => onVerComentario({ texto: pipeline.jefe.comentario, autor: pipeline.jefe.nombre, fecha: null }) : null}
+      />
+      <Conector completado={pipeline.jefe.estado === "COMPLETADO"} />
+      <NodoPipeline
+        titulo="Cliente"
+        estado={pipeline.cliente.estado}
+        nombre={pipeline.cliente.nombre}
+        fecha={pipeline.cliente.fecha}
+        comentario={pipeline.cliente.comentario}
+        clicable={false}
+        onVerComentario={pipeline.cliente.comentario ? () => onVerComentario({ texto: pipeline.cliente.comentario, autor: pipeline.cliente.nombre, fecha: null }) : null}
+      />
+      <Conector completado={pipeline.cliente.estado === "COMPLETADO"} />
+      <NodoPipeline
+        titulo="Costos"
+        estado={pipeline.costos.estado}
+        nombre={pipeline.costos.nombre}
+        fecha={pipeline.costos.fecha}
+        clicable={costosClicable}
+        onClick={onClickCostos}
+      />
+      <Conector completado={pipeline.costos.estado === "COMPLETADO"} />
+      <NodoPipeline
+        titulo="Producción"
+        estado={pipeline.produccion.estado}
+        nombre={pipeline.produccion.nombre}
+        fecha={pipeline.produccion.fecha}
+        clicable={produccionClicable}
+        onClick={onClickProduccion}
+      />
+    </div>
+  );
+}
+
+function Conector({ completado }) {
+  return (
+    <div style={{
+      flex: 1,
+      height: 2,
+      background: completado ? "#10b981" : "#e5e7eb",
+      marginTop: 17,
+      minWidth: 16,
+      flexShrink: 1,
+    }} />
+  );
+}
+
+const NODO_CONFIG = {
+  PENDIENTE:  { bg: "#f3f4f6", border: "#e5e7eb", Icono: Minus,        colorIcono: "#d1d5db" },
+  EN_PROCESO: { bg: "#fef9c3", border: "#c9a84c", Icono: Settings,     colorIcono: "#c9a84c" },
+  COMPLETADO: { bg: "#dcfce7", border: "#10b981", Icono: Check,        colorIcono: "#10b981" },
+  RECHAZADO:  { bg: "#fee2e2", border: "#ef4444", Icono: X,            colorIcono: "#ef4444" },
+};
+
+function NodoPipeline({ titulo, estado, nombre, fecha, comentario, clicable, onClick, onVerComentario }) {
+  const [hov, setHov] = useState(false);
+  const conf = NODO_CONFIG[estado] || NODO_CONFIG.PENDIENTE;
+  const esInteractivo = clicable && onClick;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#ffffff", borderRadius: 16, padding: 40, textAlign: "center", maxWidth: 320, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
-        <div style={{ width: 72, height: 72, borderRadius: "50%", background: bgCirculo, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", animation: "popIn 0.3s ease-out" }}>
-          {esExito
-            ? <CheckCircle size={36} style={{ color }} />
-            : <span style={{ fontSize: 36, lineHeight: 1, color }}>✕</span>
-          }
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 72 }}>
+      <div
+        onClick={esInteractivo ? onClick : undefined}
+        onMouseEnter={() => esInteractivo && setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        title={esInteractivo ? `Acción: ${titulo}` : titulo}
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: "50%",
+          background: conf.bg,
+          border: `2px solid ${hov ? "#212121" : conf.border}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: esInteractivo ? "pointer" : "default",
+          transition: "border-color 0.15s, transform 0.15s",
+          transform: hov ? "scale(1.1)" : "scale(1)",
+          flexShrink: 0,
+        }}
+      >
+        <conf.Icono size={15} style={{ color: conf.colorIcono }} />
+      </div>
+      <div style={{ marginTop: 6, textAlign: "center", width: 72 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>
+          {titulo}
         </div>
-        <p style={{ margin: "0 0 6px", fontSize: 17, fontWeight: 700, color: "#212121" }}>{toast.titulo}</p>
-        {toast.mensaje && <p style={{ margin: "0 0 20px", fontSize: 13, color: "#888888" }}>{toast.mensaje}</p>}
-        {!esExito && (
+        {nombre && (
+          <div style={{ fontSize: 10, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {nombre}
+          </div>
+        )}
+        {fecha && (
+          <div style={{ fontSize: 10, color: "#9ca3af" }}>{fecha}</div>
+        )}
+        {comentario && onVerComentario && (
           <button
-            onClick={onCerrar}
-            style={{ background: "#ef4444", border: "none", borderRadius: 8, padding: "9px 24px", color: "#ffffff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            onClick={onVerComentario}
+            style={{ marginTop: 2, background: "none", border: "none", color: "#ef4444", fontSize: 9, fontWeight: 600, cursor: "pointer", padding: 0, display: "block", width: "100%", textAlign: "center" }}
           >
-            Cerrar
+            Ver motivo
           </button>
+        )}
+        {esInteractivo && (
+          <div style={{ fontSize: 9, color: "#c9a84c", fontWeight: 600, marginTop: 2 }}>Acción</div>
         )}
       </div>
     </div>
   );
 }
 
-function ModalRechazoInterno({ planoId, claveCodigo, onCerrar, onConfirmado }) {
+/* ── Descripción con Ver más (modal) ── */
+function DescripcionClave({ texto, codigo }) {
+  const [abierto, setAbierto] = useState(false);
+  if (!texto) return <span style={{ color: "#d1d5db", fontSize: 13 }}>—</span>;
+  const largo = texto.length > 80;
+  const recortado = largo ? texto.slice(0, 80) + "..." : texto;
+  return (
+    <>
+      <div>
+        <span style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>{recortado}</span>
+        {largo && (
+          <button
+            onClick={() => setAbierto(true)}
+            style={{ display: "block", marginTop: 3, background: "none", border: "none", color: "#c9a84c", fontSize: 12, cursor: "pointer", padding: 0 }}
+          >
+            Ver más
+          </button>
+        )}
+      </div>
+      {abierto && createPortal(
+        <div
+          onClick={() => setAbierto(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#ffffff", borderRadius: 12, padding: 24, maxWidth: 480, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 15, color: "#212121", marginBottom: 12 }}>{codigo}</div>
+            <p style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.6, margin: 0 }}>{texto}</p>
+            <button
+              onClick={() => setAbierto(false)}
+              style={{ marginTop: 20, background: "#212121", border: "none", borderRadius: 8, color: "#ffffff", fontSize: 13, fontWeight: 600, padding: "8px 20px", cursor: "pointer" }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+/* ── Modales de acción del pipeline ── */
+function ModalAccionJefe({ plano, clave, autorizadoPorMi, onCerrar, onAutorizar, onRechazado }) {
+  const [mostrando, setMostrando] = useState("ver");
   const [comentarios, setComentarios] = useState("");
   const [err, setErr] = useState("");
   const [enviando, setEnviando] = useState(false);
 
-  async function confirmar(e) {
+  async function confirmarRechazo(e) {
     e.preventDefault();
     if (comentarios.trim().length < 10) return setErr("Los comentarios deben tener al menos 10 caracteres.");
     setEnviando(true);
     try {
-      const res = await fetch(`/api/planos/${planoId}/rechazar-interno`, {
+      const res = await fetch(`/api/planos/${plano.id}/rechazar-interno`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comentarios: comentarios.trim() }),
       });
       const data = await res.json();
       if (!res.ok) { setErr(data.error || "Error al rechazar."); return; }
-      onConfirmado();
+      onRechazado();
     } catch {
       setErr("Error de conexión.");
     } finally {
@@ -551,78 +944,171 @@ function ModalRechazoInterno({ planoId, claveCodigo, onCerrar, onConfirmado }) {
   }
 
   return (
-    <Modal titulo="Rechazar plano internamente" onCerrar={onCerrar}>
-      <form onSubmit={confirmar} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <p style={{ margin: 0, fontSize: 13, color: "#888888" }}>
-          Clave: <strong style={{ color: "#212121" }}>{claveCodigo}</strong>
-        </p>
-        <Campo label="¿Qué debe corregir el diseñador?">
-          <textarea
-            className="input-base"
-            rows={4}
-            style={{ width: "100%", resize: "vertical" }}
-            placeholder="Describe las correcciones necesarias (mínimo 10 caracteres)"
-            value={comentarios}
-            onChange={(e) => { setComentarios(e.target.value); setErr(""); }}
-            autoFocus
-          />
-        </Campo>
-        {err && <p style={{ margin: 0, color: "#ef4444", fontSize: 13 }}>{err}</p>}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button type="button" className="btn-secundario" onClick={onCerrar} disabled={enviando}>Cancelar</button>
-          <button
-            type="submit"
-            disabled={enviando}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 20px", background: "#ef4444", color: "#ffffff", fontWeight: 600, fontSize: 14, borderRadius: 8, border: "none", cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? 0.7 : 1 }}
-          >
-            {enviando ? "Rechazando…" : "Rechazar"}
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCerrar()}>
+      <div style={{ background: "#ffffff", borderRadius: 16, width: "92%", maxWidth: 760, maxHeight: "92vh", overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid #f0f0f0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#212121" }}>
+            {mostrando === "rechazar" ? "Rechazar plano" : "Revisar plano"} — {clave.codigo}
+          </h2>
+          <button onClick={onCerrar} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", padding: 4 }}>
+            <X size={20} />
           </button>
         </div>
-      </form>
-    </Modal>
+
+        {mostrando === "ver" && (
+          <>
+            <div style={{ padding: "16px 24px", flex: 1 }}>
+              <div style={{ border: "1px solid #e5e5e5", borderRadius: 8, overflow: "hidden", height: 420, background: "#f9fafb" }}>
+                <iframe src={plano.urlPdf} width="100%" height="100%" style={{ border: "none", display: "block" }} title="Plano PDF" />
+              </div>
+              <a href={plano.urlPdf} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 10, fontSize: 12, color: "#c9a84c", textDecoration: "none" }}>
+                <ExternalLink size={12} /> Abrir en nueva pestaña
+              </a>
+            </div>
+            <div style={{ padding: "16px 24px", borderTop: "1px solid #f0f0f0", display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={onCerrar}
+                style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
+                Cerrar
+              </button>
+              {!autorizadoPorMi && (
+                <>
+                  <button onClick={() => setMostrando("rechazar")}
+                    style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "9px 20px", color: "#991b1b", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    <X size={14} /> Rechazar
+                  </button>
+                  <button onClick={onAutorizar}
+                    style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "9px 20px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    <CheckCircle size={14} /> Autorizar
+                  </button>
+                </>
+              )}
+              {autorizadoPorMi && (
+                <span style={{ fontSize: 13, color: "#166534", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
+                  <CheckCircle size={14} /> Ya autorizaste este plano
+                </span>
+              )}
+            </div>
+          </>
+        )}
+
+        {mostrando === "rechazar" && (
+          <form onSubmit={confirmarRechazo} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+            <p style={{ margin: 0, fontSize: 13, color: "#6b7280" }}>
+              Describe las correcciones que debe realizar el diseñador.
+            </p>
+            <textarea
+              className="input-base"
+              rows={5}
+              style={{ width: "100%", resize: "vertical", boxSizing: "border-box" }}
+              placeholder="Ej: Ajustar medidas de la puerta principal, corregir escala de la sección B... (mínimo 10 caracteres)"
+              value={comentarios}
+              onChange={(e) => { setComentarios(e.target.value); setErr(""); }}
+              autoFocus
+            />
+            {err && <p style={{ margin: 0, color: "#ef4444", fontSize: 13 }}>{err}</p>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setMostrando("ver")}
+                style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
+                Volver
+              </button>
+              <button type="submit" disabled={enviando}
+                style={{ background: "#ef4444", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 600, fontSize: 13, cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? 0.7 : 1 }}>
+                {enviando ? "Rechazando…" : "Confirmar rechazo"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }
 
-function ComentarioRechazo({ texto, onVerMas }) {
-  const largo = texto.length > 40;
-  const resumen = largo ? texto.slice(0, 40) + "…" : texto;
+function ModalAccionCostos({ clave, ejecutando, onCerrar, onConfirmado }) {
   return (
-    <div style={{ marginTop: 5, borderLeft: "2px solid #fca5a5", paddingLeft: 6 }}>
-      <span style={{ fontSize: 11, color: "#555555", fontStyle: "italic", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        "{resumen}"
-      </span>
-      {largo && (
-        <button
-          onClick={onVerMas}
-          style={{ marginTop: 2, background: "none", border: "none", color: "#c9a84c", fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0 }}
-        >
-          Ver comentario
-        </button>
-      )}
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCerrar()}>
+      <div style={{ background: "#ffffff", borderRadius: 16, width: "90%", maxWidth: 420, padding: "28px 28px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#212121" }}>Liberar a producción</h2>
+          <button onClick={onCerrar} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer" }}><X size={20} /></button>
+        </div>
+        <p style={{ margin: "0 0 20px", fontSize: 14, color: "#6b7280", lineHeight: 1.6 }}>
+          ¿Confirmas que el análisis de costos de la clave <strong style={{ color: "#212121" }}>{clave.codigo}</strong> está completo y el plano puede liberarse a producción?
+        </p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button onClick={onCerrar}
+            style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
+            Cancelar
+          </button>
+          <button onClick={onConfirmado} disabled={ejecutando}
+            style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "9px 20px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: ejecutando ? "not-allowed" : "pointer", opacity: ejecutando ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}>
+            {ejecutando ? "Liberando…" : <><CheckCircle size={14} /> Liberar a producción</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalAccionProduccion({ clave, ejecutando, onCerrar, onConfirmado }) {
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCerrar()}>
+      <div style={{ background: "#ffffff", borderRadius: 16, width: "90%", maxWidth: 420, padding: "28px 28px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#212121" }}>Marcar en producción</h2>
+          <button onClick={onCerrar} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer" }}><X size={20} /></button>
+        </div>
+        <p style={{ margin: "0 0 20px", fontSize: 14, color: "#6b7280", lineHeight: 1.6 }}>
+          ¿Confirmas que la clave <strong style={{ color: "#212121" }}>{clave.codigo}</strong> ha entrado en proceso de producción?
+        </p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button onClick={onCerrar}
+            style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
+            Cancelar
+          </button>
+          <button onClick={onConfirmado} disabled={ejecutando}
+            style={{ background: "#212121", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 600, fontSize: 13, cursor: ejecutando ? "not-allowed" : "pointer", opacity: ejecutando ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}>
+            {ejecutando ? "Procesando…" : <><CheckCircle size={14} /> Confirmar producción</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Modales existentes ── */
+function ModalConfirmacion({ toast, onCerrar }) {
+  const esExito = toast.tipo === "exito";
+  const color = esExito ? "#10b981" : "#ef4444";
+  const bgCirculo = esExito ? "#dcfce7" : "#fee2e2";
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#ffffff", borderRadius: 16, padding: 40, textAlign: "center", maxWidth: 320, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ width: 72, height: 72, borderRadius: "50%", background: bgCirculo, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+          {esExito ? <CheckCircle size={36} style={{ color }} /> : <span style={{ fontSize: 36, lineHeight: 1, color }}>✕</span>}
+        </div>
+        <p style={{ margin: "0 0 6px", fontSize: 17, fontWeight: 700, color: "#212121" }}>{toast.titulo}</p>
+        {toast.mensaje && <p style={{ margin: "0 0 20px", fontSize: 13, color: "#888888" }}>{toast.mensaje}</p>}
+        {!esExito && (
+          <button onClick={onCerrar}
+            style={{ background: "#ef4444", border: "none", borderRadius: 8, padding: "9px 24px", color: "#ffffff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+            Cerrar
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 function ModalComentarioRechazo({ comentario, onCerrar }) {
   const fecha = comentario.fecha
-    ? new Date(comentario.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" }) +
-      " · " +
-      new Date(comentario.fecha).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) + " hrs"
+    ? new Date(comentario.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" }) + " · " + new Date(comentario.fecha).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) + " hrs"
     : null;
-
   return (
-    <Modal titulo="Comentarios de rechazo" onCerrar={onCerrar}>
-      <p style={{ margin: "0 0 16px", fontSize: 14, color: "#212121", lineHeight: 1.65, fontStyle: "italic" }}>
-        "{comentario.texto}"
-      </p>
-      {comentario.autor && (
-        <p style={{ margin: "0 0 4px", fontSize: 12, color: "#888888" }}>
-          Por: <strong style={{ color: "#555555" }}>{comentario.autor}</strong>
-        </p>
-      )}
-      {fecha && (
-        <p style={{ margin: "0 0 20px", fontSize: 11, color: "#aaaaaa" }}>{fecha}</p>
-      )}
+    <Modal titulo="Motivo de rechazo" onCerrar={onCerrar}>
+      <p style={{ margin: "0 0 16px", fontSize: 14, color: "#212121", lineHeight: 1.65, fontStyle: "italic" }}>"{comentario.texto}"</p>
+      {comentario.autor && <p style={{ margin: "0 0 4px", fontSize: 12, color: "#888888" }}>Por: <strong style={{ color: "#555555" }}>{comentario.autor}</strong></p>}
+      {fecha && <p style={{ margin: "0 0 20px", fontSize: 11, color: "#aaaaaa" }}>{fecha}</p>}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button className="btn-secundario" onClick={onCerrar}>Cerrar</button>
       </div>
@@ -630,25 +1116,7 @@ function ModalComentarioRechazo({ comentario, onCerrar }) {
   );
 }
 
-function Badge({ color, bg, children }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 6, background: bg, color, gap: 3 }}>
-      {children}
-    </span>
-  );
-}
-
-function BtnAccion({ color, bg, onClick, disabled, children }) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      style={{ display: "inline-flex", alignItems: "center", gap: 5, background: bg, border: "none", borderRadius: 6, padding: "5px 10px", color, fontSize: 11, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1, whiteSpace: "nowrap" }}>
-      {children}
-    </button>
-  );
-}
-
 /* ── Componentes del header ── */
-
 function EstatusBadge({ estatus }) {
   const conf = ESTATUS_PROYECTO[estatus] || { label: estatus, color: "#888888" };
   return (
@@ -712,15 +1180,12 @@ function CopiarLinkCliente({ pin }) {
   );
 }
 
-/* ── Modales ── */
-
+/* ── Modales de gestión ── */
 function ModalCambiarPin({ proyectoId, pinActual, onCerrar, onGuardado }) {
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
   const [guardando, setGuardando] = useState(false);
-
   function generarPin() { setPin(String(Math.floor(100000 + Math.random() * 900000))); setErr(""); }
-
   async function guardar(e) {
     e.preventDefault();
     if (!/^\d{6}$/.test(pin)) return setErr("El PIN debe ser exactamente 6 dígitos.");
@@ -732,12 +1197,9 @@ function ModalCambiarPin({ proyectoId, pinActual, onCerrar, onGuardado }) {
       onGuardado(); onCerrar();
     } finally { setGuardando(false); }
   }
-
   return (
     <Modal titulo="Cambiar PIN de acceso" onCerrar={onCerrar}>
-      <p style={{ color: "#888888", fontSize: 13, margin: "0 0 16px" }}>
-        PIN actual: <strong style={{ color: "#c9a84c", letterSpacing: 2 }}>{pinActual}</strong>
-      </p>
+      <p style={{ color: "#888888", fontSize: 13, margin: "0 0 16px" }}>PIN actual: <strong style={{ color: "#c9a84c", letterSpacing: 2 }}>{pinActual}</strong></p>
       <form onSubmit={guardar}>
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <input className="input-base" style={{ flex: 1, letterSpacing: 4, textAlign: "center", fontSize: 18, fontWeight: 700 }}
@@ -755,33 +1217,20 @@ function ModalCambiarPin({ proyectoId, pinActual, onCerrar, onGuardado }) {
 }
 
 function ModalEditarProyecto({ proyecto, onCerrar, onGuardado }) {
-  const [form, setForm] = useState({
-    nombre: proyecto.nombre,
-    clienteNombre: proyecto.clienteNombre,
-    estatus: proyecto.estatus,
-    gerentesIds: proyecto.gerentes?.map((g) => g.usuario.id) || [],
-  });
+  const gerenteActual = proyecto.gerentes?.[0]?.usuario?.id || "";
+  const [form, setForm] = useState({ nombre: proyecto.nombre, clienteNombre: proyecto.clienteNombre, estatus: proyecto.estatus, gerenteId: gerenteActual });
   const [gerentes, setGerentes] = useState([]);
   const [err, setErr] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    fetch("/api/usuarios?rol=GERENTE")
+    fetch("/api/usuarios")
       .then((r) => r.json())
-      .then((data) => setGerentes(Array.isArray(data) ? data : []))
+      .then((data) => setGerentes(Array.isArray(data) ? data.filter((u) => u.rol === "GERENTE" && u.activo) : []))
       .catch(() => {});
   }, []);
 
   function cambiar(campo, valor) { setForm((p) => ({ ...p, [campo]: valor })); setErr(""); }
-
-  function toggleGerente(id) {
-    setForm((f) => ({
-      ...f,
-      gerentesIds: f.gerentesIds.includes(id)
-        ? f.gerentesIds.filter((g) => g !== id)
-        : [...f.gerentesIds, id],
-    }));
-  }
 
   async function guardar(e) {
     e.preventDefault();
@@ -789,15 +1238,11 @@ function ModalEditarProyecto({ proyecto, onCerrar, onGuardado }) {
     if (!form.clienteNombre.trim()) return setErr("El nombre del cliente es requerido.");
     setGuardando(true);
     try {
+      const gerentesIds = form.gerenteId ? [parseInt(form.gerenteId)] : [];
       const res = await fetch(`/api/proyectos/${proyecto.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nombre: form.nombre.trim(),
-          clienteNombre: form.clienteNombre.trim(),
-          estatus: form.estatus,
-          gerentesIds: form.gerentesIds,
-        }),
+        body: JSON.stringify({ nombre: form.nombre.trim(), clienteNombre: form.clienteNombre.trim(), estatus: form.estatus, gerentesIds }),
       });
       const data = await res.json();
       if (!res.ok) return setErr(data.error || "Error al actualizar.");
@@ -819,39 +1264,12 @@ function ModalEditarProyecto({ proyecto, onCerrar, onGuardado }) {
             {Object.keys(ESTATUS_PROYECTO).map((s) => <option key={s} value={s}>{ESTATUS_PROYECTO[s].label}</option>)}
           </select>
         </Campo>
-        {gerentes.length > 0 && (
-          <Campo label="Gerentes asignados">
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {gerentes.map((g) => (
-                <label
-                  key={g.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    cursor: "pointer",
-                    padding: "10px 14px",
-                    borderRadius: 8,
-                    border: `1.5px solid ${form.gerentesIds.includes(g.id) ? "#c9a84c" : "#e5e5e5"}`,
-                    background: form.gerentesIds.includes(g.id) ? "rgba(201,168,76,0.06)" : "#ffffff",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.gerentesIds.includes(g.id)}
-                    onChange={() => toggleGerente(g.id)}
-                    style={{ accentColor: "#c9a84c", width: 16, height: 16 }}
-                  />
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: "#212121" }}>{g.nombre}</div>
-                    <div style={{ fontSize: 12, color: "#888888" }}>{g.email}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </Campo>
-        )}
+        <Campo label="Gerente asignado">
+          <select className="input-base" style={{ width: "100%" }} value={form.gerenteId} onChange={(e) => cambiar("gerenteId", e.target.value)}>
+            <option value="">Sin gerente</option>
+            {gerentes.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+          </select>
+        </Campo>
         {err && <p style={{ margin: 0, color: "#ef4444", fontSize: 13 }}>{err}</p>}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
           <button type="button" className="btn-secundario" onClick={onCerrar} disabled={guardando}>Cancelar</button>
@@ -929,15 +1347,13 @@ function ModalSubirPlano({ claveId, onCerrar, onGuardado }) {
     <Modal titulo="Subir plano (PDF)" onCerrar={onCerrar}>
       <form onSubmit={subir}>
         <div
-          style={{ border: "2px dashed #e5e5e5", borderRadius: 8, padding: 32, textAlign: "center", marginBottom: 14, cursor: "pointer", background: archivo ? "#f0fdf4" : "#fafafa", transition: "background 0.2s" }}
+          style={{ border: "2px dashed #e5e5e5", borderRadius: 8, padding: 32, textAlign: "center", marginBottom: 14, cursor: "pointer", background: archivo ? "#f0fdf4" : "#fafafa" }}
           onClick={() => document.getElementById("input-pdf-modal").click()}
         >
           <Upload size={28} style={{ color: "#c9a84c", marginBottom: 8 }} />
-          {archivo ? (
-            <p style={{ margin: 0, color: "#166534", fontSize: 13, fontWeight: 500 }}>{archivo.name}</p>
-          ) : (
-            <p style={{ margin: 0, color: "#888888", fontSize: 13 }}>Haz clic para seleccionar o arrastra el PDF<br /><span style={{ fontSize: 11, opacity: 0.7 }}>Máximo 50 MB</span></p>
-          )}
+          {archivo
+            ? <p style={{ margin: 0, color: "#166534", fontSize: 13, fontWeight: 500 }}>{archivo.name}</p>
+            : <p style={{ margin: 0, color: "#888888", fontSize: 13 }}>Haz clic para seleccionar o arrastra el PDF<br /><span style={{ fontSize: 11, opacity: 0.7 }}>Máximo 50 MB</span></p>}
         </div>
         <input id="input-pdf-modal" type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { setArchivo(e.target.files[0] || null); setErr(""); }} />
         {err && <p style={{ margin: "0 0 10px", color: "#ef4444", fontSize: 13 }}>{err}</p>}
@@ -951,7 +1367,6 @@ function ModalSubirPlano({ claveId, onCerrar, onGuardado }) {
 }
 
 /* ── Primitivos ── */
-
 function Portal({ children }) {
   const [montado, setMontado] = useState(false);
   useEffect(() => setMontado(true), []);
@@ -983,26 +1398,36 @@ function Campo({ label, children }) {
 }
 
 const sTh = {
-  padding: "10px 14px",
+  padding: "10px 16px",
   fontSize: 10,
   fontWeight: 700,
-  color: "#aaaaaa",
+  color: "#9ca3af",
   textTransform: "uppercase",
   letterSpacing: "0.07em",
   textAlign: "left",
-  borderRight: "1px solid #eeeeee",
   whiteSpace: "nowrap",
+  background: "#ffffff",
 };
 
 const sTd = {
-  padding: "12px 14px",
+  padding: "16px 16px",
   verticalAlign: "top",
-  borderRight: "1px solid #f5f5f5",
-  overflow: "hidden",
-  wordBreak: "break-word",
+  borderRight: "1px solid #f3f4f6",
 };
 
-const sVacio = {
-  color: "#dddddd",
-  fontSize: 14,
-};
+function sBtnPlano(color) {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    background: color,
+    border: "none",
+    borderRadius: 6,
+    padding: "5px 10px",
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  };
+}

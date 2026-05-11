@@ -12,8 +12,12 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
+    procesarLogin();
+  }
+
+  async function procesarLogin() {
     setCargando(true);
     setError("");
 

@@ -16,29 +16,40 @@ import {
 } from "lucide-react";
 
 const NAV_POR_ROL = {
-  GERENTE: [
+  DUENO: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
     { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
     { href: "/dashboard/usuarios", label: "Usuarios", icono: Users },
   ],
+  SUPERADMIN: [
+    { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
+    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
+    { href: "/dashboard/usuarios", label: "Usuarios", icono: Users },
+  ],
+  GERENTE: [
+    { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
+    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
+  ],
   DISENADOR: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Mis proyectos", icono: FolderOpen },
+    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
   ],
   COSTOS: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Por liberar", icono: FileText },
+    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
   ],
   PRODUCCION: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "En producción", icono: Package },
+    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
   ],
 };
 
 const ETIQUETA_ROL = {
-  GERENTE: "Gerente",
-  DISENADOR: "Diseñador",
-  COSTOS: "Costos",
+  DUENO:      "Dueño",
+  SUPERADMIN: "Superadmin",
+  GERENTE:    "Gerente",
+  DISENADOR:  "Diseñador",
+  COSTOS:     "Costos",
   PRODUCCION: "Producción",
 };
 
@@ -52,8 +63,8 @@ function Sidebar({ abierto, onCerrar, anchoSidebar }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const rol = sesion?.user?.rol || "DISENADOR";
-  const navItems = NAV_POR_ROL[rol] || NAV_POR_ROL.DISENADOR;
+  const rol = sesion?.user?.rol || "GERENTE";
+  const navItems = NAV_POR_ROL[rol] || NAV_POR_ROL.GERENTE;
 
   async function cerrarSesion() {
     await signOut({ redirect: false });

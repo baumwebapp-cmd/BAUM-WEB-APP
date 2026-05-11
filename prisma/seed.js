@@ -10,27 +10,18 @@ async function main() {
   console.log("Iniciando seed...");
 
   const passwordHash = await bcrypt.hash("baum2024!", 12);
+  const passwordDueno = await bcrypt.hash("Baum2026!", 12);
 
-  const ahora = new Date();
-  const hace30h = new Date(ahora.getTime() - 30 * 60 * 60 * 1000);
-  const hace60h = new Date(ahora.getTime() - 60 * 60 * 60 * 1000);
-
-  function fecha(color) {
-    if (color === "rojo") return hace60h;
-    if (color === "amarillo") return hace30h;
-    return ahora;
-  }
+  await prisma.usuario.upsert({
+    where: { email: "admin@baum.mx" },
+    update: { password: passwordDueno, rol: "DUENO", activo: true },
+    create: { nombre: "Administrador General", email: "admin@baum.mx", password: passwordDueno, rol: "DUENO", activo: true },
+  });
 
   const gerente1 = await prisma.usuario.upsert({
     where: { email: "gerente@baum.mx" },
     update: {},
     create: { nombre: "Carlos Baum", email: "gerente@baum.mx", password: passwordHash, rol: "GERENTE" },
-  });
-
-  const gerente2 = await prisma.usuario.upsert({
-    where: { email: "gerente2@baum.mx" },
-    update: {},
-    create: { nombre: "Laura Mendoza", email: "gerente2@baum.mx", password: passwordHash, rol: "GERENTE" },
   });
 
   const disenador = await prisma.usuario.upsert({
@@ -53,86 +44,98 @@ async function main() {
 
   console.log("Usuarios listos");
 
+  const ahora = new Date();
+  const hace10h = new Date(ahora.getTime() - 10 * 60 * 60 * 1000);
+  const hace30h = new Date(ahora.getTime() - 30 * 60 * 60 * 1000);
+  const hace60h = new Date(ahora.getTime() - 60 * 60 * 60 * 1000);
+
   const proyectos = [
     {
       nombre: "Nativa Residencial — Torre A",
       clienteNombre: "Desarrolladora Nativa SA de CV",
       pinAcceso: "111111",
+      fechaProyecto: hace60h,
       claves: [
-        { codigo: "CL-01", descripcion: "Closet principal recámara master", estatus: "LIBERADO", color: "verde" },
-        { codigo: "CL-02", descripcion: "Closet recámara 2", estatus: "AUTORIZADO", color: "verde" },
-        { codigo: "CL-03", descripcion: "Cocina integral", estatus: "ENVIADO", color: "verde" },
-        { codigo: "CL-04", descripcion: "Vanity baño principal", estatus: "REVISION_INTERNA", color: "verde" },
-        { codigo: "CL-05", descripcion: "Puerta principal madera", estatus: "BORRADOR", color: "verde" },
+        { codigo: "CL-01", descripcion: "Closet principal recámara master", estatus: "LIBERADO", ultimoMovimiento: hace10h },
+        { codigo: "CL-02", descripcion: "Closet recámara 2", estatus: "AUTORIZADO", ultimoMovimiento: hace30h },
+        { codigo: "CL-03", descripcion: "Cocina integral", estatus: "ENVIADO", ultimoMovimiento: hace60h },
+        { codigo: "CL-04", descripcion: "Vanity baño principal", estatus: "REVISION_INTERNA", ultimoMovimiento: hace30h },
+        { codigo: "CL-05", descripcion: "Puerta principal madera", estatus: "BORRADOR", ultimoMovimiento: hace60h },
       ],
     },
     {
       nombre: "Zaguan Depto 4B",
       clienteNombre: "SUA SA de CV",
       pinAcceso: "222222",
+      fechaProyecto: hace60h,
       claves: [
-        { codigo: "ZAG-01", descripcion: "Cocina integral con isla", estatus: "EN_PRODUCCION", color: "verde" },
-        { codigo: "ZAG-02", descripcion: "Closet walk-in", estatus: "LIBERADO", color: "rojo" },
-        { codigo: "ZAG-03", descripcion: "Mueble TV sala", estatus: "AUTORIZADO", color: "verde" },
-        { codigo: "ZAG-04", descripcion: "Vanity baño visitas", estatus: "RECHAZADO", color: "rojo" },
-        { codigo: "ZAG-05", descripcion: "Puerta corredera estudio", estatus: "BORRADOR", color: "rojo" },
+        { codigo: "ZAG-01", descripcion: "Cocina integral con isla", estatus: "EN_PRODUCCION", ultimoMovimiento: hace10h },
+        { codigo: "ZAG-02", descripcion: "Closet walk-in", estatus: "LIBERADO", ultimoMovimiento: hace60h },
+        { codigo: "ZAG-03", descripcion: "Mueble TV sala", estatus: "AUTORIZADO", ultimoMovimiento: hace10h },
+        { codigo: "ZAG-04", descripcion: "Vanity baño visitas", estatus: "RECHAZADO", ultimoMovimiento: hace60h },
+        { codigo: "ZAG-05", descripcion: "Puerta corredera estudio", estatus: "BORRADOR", ultimoMovimiento: hace30h },
       ],
     },
     {
       nombre: "Malta Torre Norte",
       clienteNombre: "Consur FR",
       pinAcceso: "333333",
+      fechaProyecto: hace30h,
       claves: [
-        { codigo: "MAL-01", descripcion: "Cocina principal", estatus: "REVISION_INTERNA", color: "amarillo" },
-        { codigo: "MAL-02", descripcion: "Closet recámara 1", estatus: "REVISION_INTERNA", color: "amarillo" },
-        { codigo: "MAL-03", descripcion: "Mueble lavandería", estatus: "BORRADOR", color: "amarillo" },
-        { codigo: "MAL-04", descripcion: "Puerta acceso", estatus: "BORRADOR", color: "amarillo" },
+        { codigo: "MAL-01", descripcion: "Cocina principal", estatus: "REVISION_INTERNA", ultimoMovimiento: hace30h },
+        { codigo: "MAL-02", descripcion: "Closet recámara 1", estatus: "REVISION_INTERNA", ultimoMovimiento: hace60h },
+        { codigo: "MAL-03", descripcion: "Mueble lavandería", estatus: "BORRADOR", ultimoMovimiento: hace30h },
+        { codigo: "MAL-04", descripcion: "Puerta acceso", estatus: "BORRADOR", ultimoMovimiento: hace10h },
       ],
     },
     {
       nombre: "Casa Piedra Fase 2",
       clienteNombre: "Hotel SA",
       pinAcceso: "444444",
+      fechaProyecto: hace60h,
       claves: [
-        { codigo: "CP-01", descripcion: "Cocina suite presidencial", estatus: "ENVIADO", color: "rojo" },
-        { codigo: "CP-02", descripcion: "Closet suite 101", estatus: "ENVIADO", color: "amarillo" },
-        { codigo: "CP-03", descripcion: "Vanity suite 102", estatus: "AUTORIZADO", color: "verde" },
-        { codigo: "CP-04", descripcion: "Mueble recepcion", estatus: "LIBERADO", color: "verde" },
-        { codigo: "CP-05", descripcion: "Puerta habitacion 201", estatus: "EN_PRODUCCION", color: "amarillo" },
-        { codigo: "CP-06", descripcion: "Puerta habitacion 202", estatus: "EN_PRODUCCION", color: "rojo" },
+        { codigo: "CP-01", descripcion: "Cocina suite presidencial", estatus: "ENVIADO", ultimoMovimiento: hace60h },
+        { codigo: "CP-02", descripcion: "Closet suite 101", estatus: "ENVIADO", ultimoMovimiento: hace30h },
+        { codigo: "CP-03", descripcion: "Vanity suite 102", estatus: "AUTORIZADO", ultimoMovimiento: hace10h },
+        { codigo: "CP-04", descripcion: "Mueble recepcion", estatus: "LIBERADO", ultimoMovimiento: hace10h },
+        { codigo: "CP-05", descripcion: "Puerta habitacion 201", estatus: "EN_PRODUCCION", ultimoMovimiento: hace30h },
+        { codigo: "CP-06", descripcion: "Puerta habitacion 202", estatus: "EN_PRODUCCION", ultimoMovimiento: hace60h },
       ],
     },
     {
       nombre: "Macora Residencias",
       clienteNombre: "Yamile SA",
       pinAcceso: "555555",
+      fechaProyecto: hace60h,
       claves: [
-        { codigo: "MAC-01", descripcion: "Cocina tipo A", estatus: "BORRADOR", color: "rojo" },
-        { codigo: "MAC-02", descripcion: "Cocina tipo B", estatus: "BORRADOR", color: "rojo" },
-        { codigo: "MAC-03", descripcion: "Closet tipo A", estatus: "BORRADOR", color: "rojo" },
+        { codigo: "MAC-01", descripcion: "Cocina tipo A", estatus: "BORRADOR", ultimoMovimiento: hace60h },
+        { codigo: "MAC-02", descripcion: "Cocina tipo B", estatus: "BORRADOR", ultimoMovimiento: hace30h },
+        { codigo: "MAC-03", descripcion: "Closet tipo A", estatus: "BORRADOR", ultimoMovimiento: hace10h },
       ],
     },
     {
       nombre: "Conckal Torre Sur",
       clienteNombre: "Pedrito Constructora",
       pinAcceso: "666666",
+      fechaProyecto: hace30h,
       claves: [
-        { codigo: "CON-01", descripcion: "Cocina departamento A", estatus: "REVISION_INTERNA", color: "rojo" },
-        { codigo: "CON-02", descripcion: "Closet departamento A", estatus: "BORRADOR", color: "amarillo" },
-        { codigo: "CON-03", descripcion: "Vanity departamento B", estatus: "ENVIADO", color: "amarillo" },
-        { codigo: "CON-04", descripcion: "Cocina departamento B", estatus: "AUTORIZADO", color: "verde" },
+        { codigo: "CON-01", descripcion: "Cocina departamento A", estatus: "REVISION_INTERNA", ultimoMovimiento: hace60h },
+        { codigo: "CON-02", descripcion: "Closet departamento A", estatus: "BORRADOR", ultimoMovimiento: hace30h },
+        { codigo: "CON-03", descripcion: "Vanity departamento B", estatus: "ENVIADO", ultimoMovimiento: hace10h },
+        { codigo: "CON-04", descripcion: "Cocina departamento B", estatus: "AUTORIZADO", ultimoMovimiento: hace30h },
       ],
     },
     {
       nombre: "Muretto Residencial",
       clienteNombre: "Constructora Muretto",
       pinAcceso: "777777",
+      fechaProyecto: hace10h,
       claves: [
-        { codigo: "MUR-01", descripcion: "Cocina casa muestra", estatus: "LIBERADO", color: "amarillo" },
-        { codigo: "MUR-02", descripcion: "Closet casa muestra", estatus: "EN_PRODUCCION", color: "verde" },
-        { codigo: "MUR-03", descripcion: "Vanity casa muestra", estatus: "AUTORIZADO", color: "rojo" },
-        { codigo: "MUR-04", descripcion: "Puerta principal", estatus: "REVISION_INTERNA", color: "amarillo" },
-        { codigo: "MUR-05", descripcion: "Mueble TV", estatus: "BORRADOR", color: "verde" },
+        { codigo: "MUR-01", descripcion: "Cocina casa muestra", estatus: "LIBERADO", ultimoMovimiento: hace10h },
+        { codigo: "MUR-02", descripcion: "Closet casa muestra", estatus: "EN_PRODUCCION", ultimoMovimiento: hace10h },
+        { codigo: "MUR-03", descripcion: "Vanity casa muestra", estatus: "AUTORIZADO", ultimoMovimiento: hace10h },
+        { codigo: "MUR-04", descripcion: "Puerta principal", estatus: "REVISION_INTERNA", ultimoMovimiento: hace10h },
+        { codigo: "MUR-05", descripcion: "Mueble TV", estatus: "BORRADOR", ultimoMovimiento: hace10h },
       ],
     },
   ];
@@ -149,19 +152,14 @@ async function main() {
         nombre: p.nombre,
         clienteNombre: p.clienteNombre,
         pinAcceso: p.pinAcceso,
-        createdAt: fecha(p.claves[0].color),
+        createdAt: p.fechaProyecto,
         gerentes: {
-          create: [
-            { usuarioId: gerente1.id },
-            { usuarioId: gerente2.id },
-          ],
+          create: [{ usuarioId: gerente1.id }],
         },
       },
     });
 
     for (const c of p.claves) {
-      const fechaClave = fecha(c.color);
-
       const clave = await prisma.clave.create({
         data: {
           proyectoId: proyecto.id,
@@ -169,8 +167,8 @@ async function main() {
           descripcion: c.descripcion,
           estatus: c.estatus,
           creadoPorId: disenador.id,
-          createdAt: fechaClave,
-          updatedAt: fechaClave,
+          createdAt: p.fechaProyecto,
+          updatedAt: c.ultimoMovimiento || p.fechaProyecto,
         },
       });
 
@@ -181,16 +179,13 @@ async function main() {
             urlPdf: "https://www.w3.org/WAI/WCAG21/Techniques/pdf/PDF1.pdf",
             version: 1,
             subidoPorId: disenador.id,
-            createdAt: fechaClave,
+            createdAt: p.fechaProyecto,
           },
         });
 
         if (!["REVISION_INTERNA", "RECHAZADO"].includes(c.estatus)) {
           await prisma.autorizacionInterna.createMany({
-            data: [
-              { planoId: plano.id, gerenteId: gerente1.id, decision: "APROBADO", createdAt: fechaClave },
-              { planoId: plano.id, gerenteId: gerente2.id, decision: "APROBADO", createdAt: fechaClave },
-            ],
+            data: [{ planoId: plano.id, gerenteId: gerente1.id, decision: "APROBADO", createdAt: p.fechaProyecto }],
             skipDuplicates: true,
           });
         }
@@ -202,7 +197,7 @@ async function main() {
               decision: "APROBADO",
               firmadoPor: "Cliente Demo",
               firmaBase64: "firma_demo",
-              createdAt: fechaClave,
+              createdAt: p.fechaProyecto,
             },
           });
         }
@@ -214,7 +209,7 @@ async function main() {
               decision: "RECHAZADO",
               firmadoPor: "Cliente Demo",
               comentarios: "Las medidas no coinciden con el plano arquitectónico, favor corregir.",
-              createdAt: fechaClave,
+              createdAt: p.fechaProyecto,
             },
           });
         }
@@ -224,12 +219,12 @@ async function main() {
     console.log(`Proyecto creado: ${p.nombre}`);
   }
 
-  console.log("\nCredenciales (password: baum2024!)");
-  console.log("gerente@baum.mx    -> GERENTE");
-  console.log("gerente2@baum.mx   -> GERENTE");
-  console.log("disenador@baum.mx  -> DISENADOR");
-  console.log("costos@baum.mx     -> COSTOS");
-  console.log("produccion@baum.mx -> PRODUCCION");
+  console.log("\nCredenciales:");
+  console.log("admin@baum.mx      -> DUENO    (Baum2026!)");
+  console.log("gerente@baum.mx    -> GERENTE  (baum2024!)");
+  console.log("disenador@baum.mx  -> DISENADOR (baum2024!)");
+  console.log("costos@baum.mx     -> COSTOS   (baum2024!)");
+  console.log("produccion@baum.mx -> PRODUCCION (baum2024!)");
 }
 
 main()

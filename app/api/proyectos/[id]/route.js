@@ -3,6 +3,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
+const ROLES_PUEDEN_EDITAR = ["DUENO", "SUPERADMIN", "GERENTE"];
+
 const INCLUDE_DETALLE = {
   gerentes: { include: { usuario: { select: { id: true, nombre: true, email: true } } } },
   claves: {
@@ -21,45 +23,13 @@ const INCLUDE_DETALLE = {
   },
 };
 
-async function verificarAcceso(proyectoId, rol) {
-  if (rol === "GERENTE") return true;
-
-  if (rol === "DISENADOR") {
-    const proyecto = await prisma.proyecto.findFirst({
-      where: { id: proyectoId },
-    });
-    return !!proyecto;
-  }
-
-  if (rol === "COSTOS") {
-    const proyecto = await prisma.proyecto.findFirst({
-      where: { id: proyectoId, claves: { some: { estatus: "AUTORIZADO" } } },
-    });
-    return !!proyecto;
-  }
-
-  if (rol === "PRODUCCION") {
-    const proyecto = await prisma.proyecto.findFirst({
-      where: { id: proyectoId, claves: { some: { estatus: { in: ["LIBERADO", "EN_PRODUCCION"] } } } },
-    });
-    return !!proyecto;
-  }
-
-  return false;
-}
-
 export async function GET(req, { params }) {
   const sesion = await getServerSession(authOptions);
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const { rol } = sesion.user;
   const { id } = await params;
   const proyectoId = parseInt(id);
-
   if (isNaN(proyectoId)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
-
-  const tieneAcceso = await verificarAcceso(proyectoId, rol);
-  if (!tieneAcceso) return NextResponse.json({ error: "Sin acceso a este proyecto" }, { status: 403 });
 
   try {
     const proyecto = await prisma.proyecto.findUnique({
@@ -68,7 +38,6 @@ export async function GET(req, { params }) {
     });
 
     if (!proyecto) return NextResponse.json({ error: "Proyecto no encontrado" }, { status: 404 });
-
     return NextResponse.json(proyecto);
   } catch (error) {
     console.error("[GET /api/proyectos/[id]]", error);
@@ -79,7 +48,9 @@ export async function GET(req, { params }) {
 export async function PATCH(req, { params }) {
   const sesion = await getServerSession(authOptions);
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (sesion.user.rol !== "GERENTE") return NextResponse.json({ error: "Solo gerentes pueden editar proyectos" }, { status: 403 });
+  if (!ROLES_PUEDEN_EDITAR.includes(sesion.user.rol)) {
+    return NextResponse.json({ error: "Sin permiso para editar proyectos" }, { status: 403 });
+  }
 
   const { id } = await params;
   const proyectoId = parseInt(id);
@@ -88,6 +59,10 @@ export async function PATCH(req, { params }) {
   try {
     const body = await req.json();
     const { nombre, clienteNombre, estatus, gerentesIds, pinAcceso } = body;
+
+    if (gerentesIds !== undefined && gerentesIds.length > 1) {
+      return NextResponse.json({ error: "Solo se puede asignar un gerente por proyecto" }, { status: 400 });
+    }
 
     const datos = {};
     if (nombre !== undefined) datos.nombre = nombre.trim();
@@ -125,7 +100,9 @@ export async function PATCH(req, { params }) {
 export async function DELETE(req, { params }) {
   const sesion = await getServerSession(authOptions);
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (sesion.user.rol !== "GERENTE") return NextResponse.json({ error: "Solo gerentes pueden eliminar proyectos" }, { status: 403 });
+  if (!ROLES_PUEDEN_EDITAR.includes(sesion.user.rol)) {
+    return NextResponse.json({ error: "Sin permiso para eliminar proyectos" }, { status: 403 });
+  }
 
   const { id } = await params;
   const proyectoId = parseInt(id);

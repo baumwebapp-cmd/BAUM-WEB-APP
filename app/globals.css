@@ -353,3 +353,8 @@ svg {
     margin-left: 0;
   }
 }
+
+/* Ocultar indicador de Next.js */
+nextjs-portal {
+  display: none !important;
+}

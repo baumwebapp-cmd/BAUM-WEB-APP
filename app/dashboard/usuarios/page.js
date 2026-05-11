@@ -1,31 +1,51 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { UserPlus, Pencil, UserX, UserCheck, Search, ChevronDown } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { UserPlus, Pencil, UserX, UserCheck, Search, ChevronDown, Shield, Crown } from "lucide-react";
 
-const ROLES = ["GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
 const ETIQUETA_ROL = {
-  GERENTE: "Gerente",
-  DISENADOR: "Diseñador",
-  COSTOS: "Costos",
+  DUENO:      "Dueño",
+  SUPERADMIN: "Superadmin",
+  GERENTE:    "Gerente",
+  DISENADOR:  "Diseñador",
+  COSTOS:     "Costos",
   PRODUCCION: "Producción",
 };
+
 const COLOR_ROL = {
-  GERENTE: { background: "#1a1a1a", color: "#c9a84c" },
-  DISENADOR: { background: "#1e3a5f", color: "#93c5fd" },
-  COSTOS: { background: "#14532d", color: "#86efac" },
+  DUENO:      { background: "#1a0a00", color: "#f59e0b" },
+  SUPERADMIN: { background: "#1a0033", color: "#c084fc" },
+  GERENTE:    { background: "#1a1a1a", color: "#c9a84c" },
+  DISENADOR:  { background: "#1e3a5f", color: "#93c5fd" },
+  COSTOS:     { background: "#14532d", color: "#86efac" },
   PRODUCCION: { background: "#4a1d1d", color: "#fca5a5" },
 };
+
+function rolesVisibles(rolActual) {
+  if (rolActual === "DUENO") return ["DUENO", "SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+  if (rolActual === "SUPERADMIN") return ["GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+  return [];
+}
+
+function rolesCreables(rolActual) {
+  if (rolActual === "DUENO") return ["SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+  if (rolActual === "SUPERADMIN") return ["GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+  return [];
+}
 
 const VACIO_FORM = {
   nombre: "",
   email: "",
-  rol: "DISENADOR",
+  rol: "GERENTE",
   password: "",
   passwordConfirm: "",
 };
 
 export default function UsuariosPage() {
+  const { data: sesion } = useSession();
+  const rolActual = sesion?.user?.rol;
+
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
@@ -39,7 +59,6 @@ export default function UsuariosPage() {
   const [form, setForm] = useState(VACIO_FORM);
   const [errForm, setErrForm] = useState("");
   const [guardando, setGuardando] = useState(false);
-
   const [mostrarPass, setMostrarPass] = useState(false);
 
   const cargarUsuarios = useCallback(async () => {
@@ -53,14 +72,16 @@ export default function UsuariosPage() {
     }
   }, []);
 
-  useEffect(() => {
-    cargarUsuarios();
-  }, [cargarUsuarios]);
+  useEffect(() => { cargarUsuarios(); }, [cargarUsuarios]);
+
+  if (!rolActual) return null;
+
+  const roles = rolesVisibles(rolActual);
+  const rolesParaCrear = rolesCreables(rolActual);
 
   const usuariosFiltrados = usuarios.filter((u) => {
     const texto = busqueda.toLowerCase();
-    const coincideTexto =
-      !texto || u.nombre.toLowerCase().includes(texto) || u.email.toLowerCase().includes(texto);
+    const coincideTexto = !texto || u.nombre.toLowerCase().includes(texto) || u.email.toLowerCase().includes(texto);
     const coincideRol = !filtroRol || u.rol === filtroRol;
     const coincideActivo =
       filtroActivo === "" ||
@@ -70,20 +91,14 @@ export default function UsuariosPage() {
   });
 
   function abrirCrear() {
-    setForm(VACIO_FORM);
+    setForm({ ...VACIO_FORM, rol: rolesParaCrear[0] || "GERENTE" });
     setErrForm("");
     setMostrarPass(false);
     setModalCrear(true);
   }
 
   function abrirEditar(usuario) {
-    setForm({
-      nombre: usuario.nombre,
-      email: usuario.email,
-      rol: usuario.rol,
-      password: "",
-      passwordConfirm: "",
-    });
+    setForm({ nombre: usuario.nombre, email: usuario.email, rol: usuario.rol, password: "", passwordConfirm: "" });
     setErrForm("");
     setMostrarPass(false);
     setModalEditar(usuario);
@@ -108,7 +123,6 @@ export default function UsuariosPage() {
     if (!password) return setErrForm("La contraseña es requerida.");
     if (password.length < 8) return setErrForm("La contraseña debe tener al menos 8 caracteres.");
     if (password !== passwordConfirm) return setErrForm("Las contraseñas no coinciden.");
-
     setGuardando(true);
     try {
       const res = await fetch("/api/usuarios", {
@@ -120,9 +134,7 @@ export default function UsuariosPage() {
       if (!res.ok) return setErrForm(data.error || "Error al crear usuario.");
       await cargarUsuarios();
       cerrarModales();
-    } finally {
-      setGuardando(false);
-    }
+    } finally { setGuardando(false); }
   }
 
   async function guardarEditar(e) {
@@ -132,10 +144,8 @@ export default function UsuariosPage() {
     if (!email.trim()) return setErrForm("El email es requerido.");
     if (password && password.length < 8) return setErrForm("La contraseña debe tener al menos 8 caracteres.");
     if (password && password !== passwordConfirm) return setErrForm("Las contraseñas no coinciden.");
-
     const body = { nombre: nombre.trim(), email: email.trim(), rol };
     if (password) body.passwordNuevo = password;
-
     setGuardando(true);
     try {
       const res = await fetch(`/api/usuarios/${modalEditar.id}`, {
@@ -147,9 +157,7 @@ export default function UsuariosPage() {
       if (!res.ok) return setErrForm(data.error || "Error al actualizar usuario.");
       await cargarUsuarios();
       cerrarModales();
-    } finally {
-      setGuardando(false);
-    }
+    } finally { setGuardando(false); }
   }
 
   async function toggleActivo(usuario) {
@@ -161,23 +169,18 @@ export default function UsuariosPage() {
         body: JSON.stringify({ activo: !usuario.activo }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setModalConfirmar(null);
-        setErrForm(data.error || "Error al cambiar estado.");
-        return;
-      }
+      if (!res.ok) { setModalConfirmar(null); setErrForm(data.error || "Error al cambiar estado."); return; }
       await cargarUsuarios();
       cerrarModales();
-    } finally {
-      setGuardando(false);
-    }
+    } finally { setGuardando(false); }
   }
 
-  /* Conteo por rol para la barra de resumen */
-  const conteoRol = ROLES.reduce((acc, r) => {
+  const conteoRol = roles.reduce((acc, r) => {
     acc[r] = usuarios.filter((u) => u.rol === r).length;
     return acc;
   }, {});
+
+  const esDueno = (u) => u.rol === "DUENO";
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -189,36 +192,38 @@ export default function UsuariosPage() {
             {usuarios.length} usuario{usuarios.length !== 1 ? "s" : ""} registrado{usuarios.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <button className="btn-primario" onClick={abrirCrear} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <UserPlus size={16} /> Nuevo usuario
-        </button>
+        {rolesParaCrear.length > 0 && (
+          <button className="btn-primario" onClick={abrirCrear} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <UserPlus size={16} /> Nuevo usuario
+          </button>
+        )}
       </div>
 
-      {/* Resumen por rol */}
+      {/* Chips por rol */}
       {!cargando && usuarios.length > 0 && (
-        <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-          {ROLES.map((r) => {
-            const { background, color } = COLOR_ROL[r];
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          {roles.map((r) => {
+            const { background, color } = COLOR_ROL[r] || { background: "#333", color: "#fff" };
+            const activo = filtroRol === r;
             return (
               <button
                 key={r}
-                onClick={() => setFiltroRol(filtroRol === r ? "" : r)}
+                onClick={() => setFiltroRol(activo ? "" : r)}
                 style={{
                   display: "flex", alignItems: "center", gap: 8,
-                  padding: "8px 14px", borderRadius: 10, cursor: "pointer",
-                  border: `1.5px solid ${filtroRol === r ? color : "transparent"}`,
-                  background: filtroRol === r ? background : "#f5f5f5",
+                  padding: "7px 14px", borderRadius: 10, cursor: "pointer",
+                  border: `1.5px solid ${activo ? color : "transparent"}`,
+                  background: activo ? background : "#f5f5f5",
                   transition: "all 0.15s",
                 }}
               >
-                <span style={{ fontSize: 18, fontWeight: 800, color: filtroRol === r ? color : "#212121", lineHeight: 1 }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: activo ? color : "#212121", lineHeight: 1 }}>
                   {conteoRol[r]}
                 </span>
                 <span style={{
                   fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
-                  background: "transparent",
-                  color: filtroRol === r ? color : "#666666",
-                  border: `1px solid ${filtroRol === r ? color : "#d4d4d4"}`,
+                  color: activo ? color : "#666666",
+                  border: `1px solid ${activo ? color : "#d4d4d4"}`,
                 }}>
                   {ETIQUETA_ROL[r]}
                 </span>
@@ -226,11 +231,8 @@ export default function UsuariosPage() {
             );
           })}
           {filtroRol && (
-            <button
-              onClick={() => setFiltroRol("")}
-              style={{ fontSize: 12, color: "#888888", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, padding: "0 6px" }}
-            >
-              × Limpiar filtro
+            <button onClick={() => setFiltroRol("")} style={{ fontSize: 12, color: "#888888", background: "transparent", border: "none", cursor: "pointer", padding: "0 6px" }}>
+              × Limpiar
             </button>
           )}
         </div>
@@ -249,9 +251,7 @@ export default function UsuariosPage() {
           />
         </div>
         <SelectFiltro value={filtroRol} onChange={setFiltroRol} placeholder="Todos los roles">
-          {ROLES.map((r) => (
-            <option key={r} value={r}>{ETIQUETA_ROL[r]}</option>
-          ))}
+          {roles.map((r) => <option key={r} value={r}>{ETIQUETA_ROL[r]}</option>)}
         </SelectFiltro>
         <SelectFiltro value={filtroActivo} onChange={setFiltroActivo} placeholder="Todos">
           <option value="activos">Activos</option>
@@ -259,9 +259,9 @@ export default function UsuariosPage() {
         </SelectFiltro>
       </div>
 
-      {/* Grid de tarjetas */}
+      {/* Lista */}
       {cargando ? (
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: 64 }}>
+        <div style={{ display: "flex", justifyContent: "center", padding: 64 }}>
           <div className="spinner" />
         </div>
       ) : usuariosFiltrados.length === 0 ? (
@@ -274,8 +274,10 @@ export default function UsuariosPage() {
             <TarjetaUsuario
               key={u.id}
               usuario={u}
+              rolActual={rolActual}
               onEditar={() => abrirEditar(u)}
               onToggle={() => setModalConfirmar(u)}
+              rolesEditables={rolesParaCrear}
             />
           ))}
         </div>
@@ -283,7 +285,7 @@ export default function UsuariosPage() {
 
       {/* Modal crear */}
       {modalCrear && (
-        <Modal titulo="Nuevo usuario" onCerrar={cerrarModales}>
+        <ModalBase titulo="Nuevo usuario" onCerrar={cerrarModales}>
           <form onSubmit={guardarCrear}>
             <FormUsuario
               form={form}
@@ -292,22 +294,19 @@ export default function UsuariosPage() {
               setMostrarPass={setMostrarPass}
               esEdicion={false}
               errForm={errForm}
+              rolesDisponibles={rolesParaCrear}
             />
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-              <button type="button" className="btn-secundario" onClick={cerrarModales} disabled={guardando}>
-                Cancelar
-              </button>
-              <button type="submit" className="btn-primario" disabled={guardando}>
-                {guardando ? "Creando…" : "Crear usuario"}
-              </button>
+              <button type="button" className="btn-secundario" onClick={cerrarModales} disabled={guardando}>Cancelar</button>
+              <button type="submit" className="btn-primario" disabled={guardando}>{guardando ? "Creando…" : "Crear usuario"}</button>
             </div>
           </form>
-        </Modal>
+        </ModalBase>
       )}
 
       {/* Modal editar */}
       {modalEditar && (
-        <Modal titulo={`Editar: ${modalEditar.nombre}`} onCerrar={cerrarModales}>
+        <ModalBase titulo={`Editar: ${modalEditar.nombre}`} onCerrar={cerrarModales}>
           <form onSubmit={guardarEditar}>
             <FormUsuario
               form={form}
@@ -316,50 +315,49 @@ export default function UsuariosPage() {
               setMostrarPass={setMostrarPass}
               esEdicion={true}
               errForm={errForm}
+              rolesDisponibles={esDueno(modalEditar) ? [] : rolesParaCrear}
+              rolBloqueado={esDueno(modalEditar)}
             />
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-              <button type="button" className="btn-secundario" onClick={cerrarModales} disabled={guardando}>
-                Cancelar
-              </button>
-              <button type="submit" className="btn-primario" disabled={guardando}>
-                {guardando ? "Guardando…" : "Guardar cambios"}
-              </button>
+              <button type="button" className="btn-secundario" onClick={cerrarModales} disabled={guardando}>Cancelar</button>
+              <button type="submit" className="btn-primario" disabled={guardando}>{guardando ? "Guardando…" : "Guardar cambios"}</button>
             </div>
           </form>
-        </Modal>
+        </ModalBase>
       )}
 
-      {/* Modal confirmar toggle activo */}
+      {/* Modal confirmar toggle */}
       {modalConfirmar && (
-        <Modal titulo={modalConfirmar.activo ? "Desactivar usuario" : "Activar usuario"} onCerrar={cerrarModales}>
-          <p style={{ color: "var(--texto-suave)", marginBottom: 20, lineHeight: 1.6 }}>
+        <ModalBase titulo={modalConfirmar.activo ? "Desactivar usuario" : "Activar usuario"} onCerrar={cerrarModales}>
+          <p style={{ color: "#888888", marginBottom: 20, lineHeight: 1.6, fontSize: 14 }}>
             {modalConfirmar.activo
               ? `¿Desactivar la cuenta de ${modalConfirmar.nombre}? No podrá iniciar sesión, pero su historial se conserva.`
               : `¿Reactivar la cuenta de ${modalConfirmar.nombre}? Podrá volver a iniciar sesión.`}
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button className="btn-secundario" onClick={cerrarModales} disabled={guardando}>
-              Cancelar
-            </button>
+            <button className="btn-secundario" onClick={cerrarModales} disabled={guardando}>Cancelar</button>
             <button
-              className={modalConfirmar.activo ? "btn-peligro" : "btn-primario"}
               onClick={() => toggleActivo(modalConfirmar)}
               disabled={guardando}
+              style={{ background: modalConfirmar.activo ? "#ef4444" : "#22c55e", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontSize: 13, fontWeight: 600, cursor: guardando ? "not-allowed" : "pointer" }}
             >
               {guardando ? "Procesando…" : modalConfirmar.activo ? "Desactivar" : "Activar"}
             </button>
           </div>
-        </Modal>
+        </ModalBase>
       )}
     </div>
   );
 }
 
-/* ── Componentes auxiliares ── */
+/* ── Tarjeta de usuario ── */
 
-function TarjetaUsuario({ usuario: u, onEditar, onToggle }) {
+function TarjetaUsuario({ usuario: u, rolActual, onEditar, onToggle, rolesEditables }) {
   const [hov, setHov] = useState(false);
   const { background: rolBg, color: rolColor } = COLOR_ROL[u.rol] || { background: "#333", color: "#fff" };
+  const esDueno = u.rol === "DUENO";
+  const puedeEditar = esDueno ? rolActual === "DUENO" : rolesEditables.includes(u.rol);
+  const puedeToggle = !esDueno && rolesEditables.includes(u.rol);
 
   return (
     <div
@@ -378,102 +376,68 @@ function TarjetaUsuario({ usuario: u, onEditar, onToggle }) {
         boxShadow: hov ? "0 4px 18px rgba(0,0,0,0.07)" : "0 1px 3px rgba(0,0,0,0.04)",
       }}
     >
-      {/* Fila superior: avatar + info + badge rol */}
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <AvatarGrande nombre={u.nombre} rolBg={rolBg} rolColor={rolColor} />
+        <AvatarGrande nombre={u.nombre} rolBg={rolBg} rolColor={rolColor} esEspecial={esDueno || u.rol === "SUPERADMIN"} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#212121", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {u.nombre}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#212121", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {u.nombre}
+            </div>
+            {esDueno && <Crown size={12} style={{ color: "#f59e0b", flexShrink: 0 }} />}
+            {u.rol === "SUPERADMIN" && <Shield size={12} style={{ color: "#c084fc", flexShrink: 0 }} />}
           </div>
-          <div style={{ fontSize: 12, color: "#888888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {u.email}
-          </div>
+          <div style={{ fontSize: 12, color: "#888888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
         </div>
-        <span style={{
-          flexShrink: 0,
-          display: "inline-block",
-          padding: "3px 10px",
-          borderRadius: 10,
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: "0.04em",
-          background: "transparent",
-          color: "#666666",
-          border: "1px solid #d4d4d4",
-        }}>
+        <span style={{ flexShrink: 0, display: "inline-block", padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, color: "#666666", border: "1px solid #d4d4d4" }}>
           {ETIQUETA_ROL[u.rol]}
         </span>
       </div>
 
-      {/* Divisor */}
       <div style={{ height: 1, background: "#f0f0f0" }} />
 
-      {/* Fila inferior: estado + fecha + acciones */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {/* Estado */}
-        <span style={{
-          display: "inline-flex", alignItems: "center", gap: 5,
-          fontSize: 12, fontWeight: 600,
-          color: u.activo ? "#16a34a" : "#888888",
-          background: u.activo ? "#dcfce7" : "#f3f4f6",
-          padding: "3px 10px", borderRadius: 20,
-        }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: u.activo ? "#16a34a" : "#888888", background: u.activo ? "#dcfce7" : "#f3f4f6", padding: "3px 10px", borderRadius: 20 }}>
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: u.activo ? "#22c55e" : "#aaaaaa", display: "inline-block" }} />
           {u.activo ? "Activo" : "Inactivo"}
         </span>
-
-        {/* Fecha */}
         <span style={{ fontSize: 11, color: "#aaaaaa", marginLeft: "auto" }}>
           Alta: {new Date(u.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
         </span>
-
-        {/* Botones */}
         <div style={{ display: "flex", gap: 6 }}>
-          <button
-            title="Editar"
-            onClick={onEditar}
-            style={{
-              background: "#f5f5f5", border: "none", borderRadius: 7,
-              padding: "6px 8px", cursor: "pointer", display: "flex", alignItems: "center",
-              color: "#555555", transition: "background 0.1s",
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "#e8e8e8"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "#f5f5f5"}
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            title={u.activo ? "Desactivar usuario" : "Activar usuario"}
-            onClick={onToggle}
-            style={{
-              background: u.activo ? "#fff1f1" : "#f0fdf4",
-              border: "none", borderRadius: 7,
-              padding: "6px 8px", cursor: "pointer", display: "flex", alignItems: "center",
-              color: u.activo ? "#ef4444" : "#22c55e",
-              transition: "background 0.1s",
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = u.activo ? "#fde8e8" : "#dcfce7"}
-            onMouseLeave={(e) => e.currentTarget.style.background = u.activo ? "#fff1f1" : "#f0fdf4"}
-          >
-            {u.activo ? <UserX size={13} /> : <UserCheck size={13} />}
-          </button>
+          {puedeEditar && (
+            <button
+              title="Editar"
+              onClick={onEditar}
+              style={{ background: "#f5f5f5", border: "none", borderRadius: 7, padding: "6px 8px", cursor: "pointer", display: "flex", alignItems: "center", color: "#555555" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#e8e8e8")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#f5f5f5")}
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+          {puedeToggle && (
+            <button
+              title={u.activo ? "Desactivar usuario" : "Activar usuario"}
+              onClick={onToggle}
+              style={{ background: u.activo ? "#fff1f1" : "#f0fdf4", border: "none", borderRadius: 7, padding: "6px 8px", cursor: "pointer", display: "flex", alignItems: "center", color: u.activo ? "#ef4444" : "#22c55e" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = u.activo ? "#fde8e8" : "#dcfce7")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = u.activo ? "#fff1f1" : "#f0fdf4")}
+            >
+              {u.activo ? <UserX size={13} /> : <UserCheck size={13} />}
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function AvatarGrande({ nombre, rolBg, rolColor }) {
+/* ── Primitivos ── */
+
+function AvatarGrande({ nombre, rolBg, rolColor, esEspecial }) {
   const iniciales = nombre.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
   return (
-    <div style={{
-      width: 44, height: 44, borderRadius: "50%",
-      background: rolBg,
-      border: `2px solid ${rolColor}`,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: 14, fontWeight: 800, color: rolColor,
-      flexShrink: 0, letterSpacing: "0.02em",
-    }}>
+    <div style={{ width: 44, height: 44, borderRadius: "50%", background: rolBg, border: `2px solid ${rolColor}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: rolColor, flexShrink: 0 }}>
       {iniciales}
     </div>
   );
@@ -491,43 +455,18 @@ function SelectFiltro({ value, onChange, placeholder, children }) {
         <option value="">{placeholder}</option>
         {children}
       </select>
-      <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--texto-suave)" }} />
+      <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#888888" }} />
     </div>
   );
 }
 
-function Avatar({ nombre }) {
-  const iniciales = nombre
-    .split(" ")
-    .slice(0, 2)
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase();
-  return (
-    <div style={{
-      width: 32, height: 32, borderRadius: "50%",
-      background: "#1a1a1a", border: "1px solid var(--acento)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: 11, fontWeight: 700, color: "var(--acento)",
-      flexShrink: 0,
-    }}>
-      {iniciales}
-    </div>
-  );
-}
-
-function Modal({ titulo, onCerrar, children }) {
+function ModalBase({ titulo, onCerrar, children }) {
   return (
     <div className="modal-overlay" onClick={onCerrar}>
       <div className="modal-contenido" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>{titulo}</h2>
-          <button
-            onClick={onCerrar}
-            style={{ background: "transparent", border: "none", color: "var(--texto-suave)", cursor: "pointer", fontSize: 20, lineHeight: 1 }}
-          >
-            ×
-          </button>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#212121" }}>{titulo}</h2>
+          <button onClick={onCerrar} style={{ background: "transparent", border: "none", color: "#888888", cursor: "pointer", fontSize: 20, lineHeight: 1 }}>×</button>
         </div>
         {children}
       </div>
@@ -535,46 +474,48 @@ function Modal({ titulo, onCerrar, children }) {
   );
 }
 
-function FormUsuario({ form, onChange, mostrarPass, setMostrarPass, esEdicion, errForm }) {
+const estiloLabel = {
+  display: "block",
+  marginBottom: 5,
+  fontSize: 12,
+  fontWeight: 600,
+  color: "#888888",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+};
+
+function FormUsuario({ form, onChange, mostrarPass, setMostrarPass, esEdicion, errForm, rolesDisponibles, rolBloqueado }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
         <label style={estiloLabel}>Nombre completo</label>
-        <input
-          className="input-base"
-          style={{ width: "100%" }}
-          value={form.nombre}
-          onChange={(e) => onChange("nombre", e.target.value)}
-          placeholder="Ej. Ana González"
-          autoFocus
-        />
+        <input className="input-base" style={{ width: "100%" }} value={form.nombre} onChange={(e) => onChange("nombre", e.target.value)} placeholder="Ej. Ana González" autoFocus />
       </div>
       <div>
         <label style={estiloLabel}>Email</label>
-        <input
-          className="input-base"
-          style={{ width: "100%" }}
-          type="email"
-          value={form.email}
-          onChange={(e) => onChange("email", e.target.value)}
-          placeholder="correo@empresa.com"
-        />
+        <input className="input-base" style={{ width: "100%" }} type="email" value={form.email} onChange={(e) => onChange("email", e.target.value)} placeholder="correo@empresa.com" />
       </div>
       <div>
         <label style={estiloLabel}>Rol</label>
-        <div style={{ position: "relative" }}>
-          <select
-            className="input-base"
-            style={{ width: "100%", appearance: "none", paddingRight: 30 }}
-            value={form.rol}
-            onChange={(e) => onChange("rol", e.target.value)}
-          >
-            {ROLES.map((r) => (
-              <option key={r} value={r}>{ETIQUETA_ROL[r]}</option>
-            ))}
-          </select>
-          <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--texto-suave)" }} />
-        </div>
+        {rolBloqueado ? (
+          <div style={{ padding: "10px 14px", background: "#f5f5f5", borderRadius: 8, fontSize: 13, color: "#888888", border: "1px solid #e5e5e5" }}>
+            {ETIQUETA_ROL[form.rol]} — no modificable
+          </div>
+        ) : (
+          <div style={{ position: "relative" }}>
+            <select
+              className="input-base"
+              style={{ width: "100%", appearance: "none", paddingRight: 30 }}
+              value={form.rol}
+              onChange={(e) => onChange("rol", e.target.value)}
+            >
+              {rolesDisponibles.map((r) => (
+                <option key={r} value={r}>{ETIQUETA_ROL[r]}</option>
+              ))}
+            </select>
+            <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#888888" }} />
+          </div>
+        )}
       </div>
       <div>
         <label style={estiloLabel}>{esEdicion ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña"}</label>
@@ -588,15 +529,7 @@ function FormUsuario({ form, onChange, mostrarPass, setMostrarPass, esEdicion, e
             placeholder={esEdicion ? "••••••••" : "Mínimo 8 caracteres"}
             autoComplete="new-password"
           />
-          <button
-            type="button"
-            onClick={() => setMostrarPass(!mostrarPass)}
-            style={{
-              position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-              background: "transparent", border: "none", color: "var(--texto-suave)",
-              cursor: "pointer", fontSize: 12, padding: "2px 4px",
-            }}
-          >
+          <button type="button" onClick={() => setMostrarPass(!mostrarPass)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: "#888888", cursor: "pointer", fontSize: 12 }}>
             {mostrarPass ? "Ocultar" : "Mostrar"}
           </button>
         </div>
@@ -604,32 +537,14 @@ function FormUsuario({ form, onChange, mostrarPass, setMostrarPass, esEdicion, e
       {(form.password || !esEdicion) && (
         <div>
           <label style={estiloLabel}>Confirmar contraseña</label>
-          <input
-            className="input-base"
-            style={{ width: "100%" }}
-            type={mostrarPass ? "text" : "password"}
-            value={form.passwordConfirm}
-            onChange={(e) => onChange("passwordConfirm", e.target.value)}
-            placeholder="Repite la contraseña"
-            autoComplete="new-password"
-          />
+          <input className="input-base" style={{ width: "100%" }} type={mostrarPass ? "text" : "password"} value={form.passwordConfirm} onChange={(e) => onChange("passwordConfirm", e.target.value)} placeholder="Repite la contraseña" autoComplete="new-password" />
         </div>
       )}
       {errForm && (
-        <p style={{ margin: 0, padding: "8px 12px", background: "#2d1515", border: "1px solid #f87171", borderRadius: 6, color: "#fca5a5", fontSize: 13 }}>
+        <p style={{ margin: 0, padding: "8px 12px", background: "#fff5f5", border: "1px solid #fca5a5", borderRadius: 6, color: "#ef4444", fontSize: 13 }}>
           {errForm}
         </p>
       )}
     </div>
   );
 }
-
-const estiloLabel = {
-  display: "block",
-  marginBottom: 5,
-  fontSize: 12,
-  fontWeight: 600,
-  color: "var(--texto-suave)",
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
-};
