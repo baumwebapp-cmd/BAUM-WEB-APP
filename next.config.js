@@ -2,6 +2,12 @@
 const nextConfig = {
   allowedDevOrigins: ['192.168.100.150'],
 
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '52mb',
+    },
+  },
+
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "utfs.io" },
@@ -32,7 +38,5 @@ const nextConfig = {
     ];
   },
 };
-
-
 
 module.exports = nextConfig;
