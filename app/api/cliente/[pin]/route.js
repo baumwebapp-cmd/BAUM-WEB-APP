@@ -1,10 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import {
+  obtenerIp,
+  verificarLimiteCliente,
+  registrarIntentoCliente,
+  respuestaBloqueado,
+} from "@/lib/rateLimit";
 
 export async function GET(req, { params }) {
   const { pin } = await params;
+  const ip = obtenerIp(req);
+
+  const limite = await verificarLimiteCliente(ip);
+  if (limite.bloqueado) return respuestaBloqueado(limite.segundosRestantes);
 
   if (!/^\d{6}$/.test(pin)) {
+    await registrarIntentoCliente(ip, pin, false);
     return NextResponse.json({ error: "PIN inválido" }, { status: 400 });
   }
 
@@ -51,8 +62,11 @@ export async function GET(req, { params }) {
     });
 
     if (!proyecto) {
+      await registrarIntentoCliente(ip, pin, false);
       return NextResponse.json({ error: "Proyecto no encontrado" }, { status: 404 });
     }
+
+    await registrarIntentoCliente(ip, pin, true);
 
     const ESTATUS_VISIBLES = ["ENVIADO", "AUTORIZADO", "LIBERADO", "EN_PRODUCCION"];
     const clavesVisibles = proyecto.claves.filter((c) => ESTATUS_VISIBLES.includes(c.estatus));

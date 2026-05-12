@@ -135,15 +135,28 @@ model Notificacion {
 
 model AuditoriaAdmin {
   id        Int      @id @default(autoincrement())
-  usuarioId Int
+  usuarioId Int?
+  actor     String?
   accion    String
   detalle   String?
   ip        String?
   createdAt DateTime @default(now())
 
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
 
   @@index([usuarioId])
+  @@index([createdAt])
+  @@index([accion])
+}
+
+model IntentoAccesoCliente {
+  id        Int      @id @default(autoincrement())
+  ip        String
+  pin       String
+  exitoso   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
   @@index([createdAt])
 }
 

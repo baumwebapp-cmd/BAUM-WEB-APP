@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { registrarAuditoria, obtenerIpAuditoria } from "@/lib/auditoria";
 
 export async function POST(req, { params }) {
   const sesion = await getServerSession(authOptions);
@@ -34,18 +35,19 @@ export async function POST(req, { params }) {
       return NextResponse.json({ error: "La clave no está autorizada por el cliente" }, { status: 400 });
     }
 
+    const ip = obtenerIpAuditoria(req);
+
     await prisma.$transaction(async (tx) => {
       await tx.clave.update({
         where: { id: plano.claveId },
-        data: { estatus: "RECHAZADO" },
+        data: { estatus: "RECHAZADO", updatedAt: new Date() },
       });
 
-      await tx.auditoriaAdmin.create({
-        data: {
-          usuarioId,
-          accion: "RECHAZO_COSTOS",
-          detalle: `Plano #${planoId} (clave ${plano.claveId}): ${comentarios.trim()}`,
-        },
+      await registrarAuditoria(tx, {
+        usuarioId,
+        accion: "RECHAZAR_COSTOS",
+        detalle: `Plano #${planoId} (clave ${plano.clave.codigo}): ${comentarios.trim()}`,
+        ip,
       });
     });
 

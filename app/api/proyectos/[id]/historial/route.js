@@ -114,7 +114,8 @@ export async function GET(req, { params }) {
               descripcion: `Cliente aprobó ${clave.codigo} — firmado por: ${ac.firmadoPor}`,
               responsable: ac.firmadoPor,
               comentarios: null,
-              urlPdfFirmado: ac.urlPdfFirmado || null,
+              tieneFirmado: !!ac.urlPdfFirmado,
+              planoId: plano.id,
               clave: clave.codigo,
               fecha: ac.createdAt,
             });

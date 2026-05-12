@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { emailPlanoLiberado } from "@/lib/email";
+import { registrarAuditoria, obtenerIpAuditoria } from "@/lib/auditoria";
 
 export async function POST(req, { params }) {
   const sesion = await getServerSession(authOptions);
@@ -46,9 +47,17 @@ export async function POST(req, { params }) {
       );
     }
 
-    await prisma.clave.update({
-      where: { id: plano.claveId },
-      data: { estatus: "LIBERADO" },
+    await prisma.$transaction(async (tx) => {
+      await tx.clave.update({
+        where: { id: plano.claveId },
+        data: { estatus: "LIBERADO" },
+      });
+      await registrarAuditoria(tx, {
+        usuarioId: parseInt(sesion.user.id),
+        accion: "LIBERAR_PRODUCCION",
+        detalle: `Plano #${planoId} (clave ${plano.clave.codigo}) liberado a producción`,
+        ip: obtenerIpAuditoria(req),
+      });
     });
 
     emailPlanoLiberado({

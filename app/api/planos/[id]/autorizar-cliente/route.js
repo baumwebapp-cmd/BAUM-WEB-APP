@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import { DIRECTORIO_PLANOS, leerArchivoPdf, decodificarFirmaPng } from "@/lib/archivos";
+import { registrarAuditoria } from "@/lib/auditoria";
 
 export async function POST(req, { params }) {
   const { id } = await params;
@@ -21,6 +23,7 @@ export async function POST(req, { params }) {
   if (!decision || !["APROBADO", "RECHAZADO"].includes(decision)) {
     return NextResponse.json({ error: "decision debe ser APROBADO o RECHAZADO" }, { status: 400 });
   }
+  let firmaBuffer = null;
   if (decision === "APROBADO") {
     if (!firmadoPor?.trim()) {
       return NextResponse.json({ error: "El nombre del firmante es obligatorio" }, { status: 400 });
@@ -28,6 +31,11 @@ export async function POST(req, { params }) {
     if (!firmaBase64) {
       return NextResponse.json({ error: "La firma es obligatoria para aprobar" }, { status: 400 });
     }
+    const firmaDecodificada = decodificarFirmaPng(firmaBase64);
+    if (firmaDecodificada.error) {
+      return NextResponse.json({ error: firmaDecodificada.error }, { status: 400 });
+    }
+    firmaBuffer = firmaDecodificada.buffer;
   }
   if (decision === "RECHAZADO") {
     if (!comentarios?.trim() || comentarios.trim().length < 10) {
@@ -74,8 +82,10 @@ export async function POST(req, { params }) {
     let urlPdfFirmado = null;
 
     if (decision === "APROBADO") {
-      const rutaAbsoluta = path.join(process.cwd(), "public", plano.urlPdf);
-      const pdfBytes = await readFile(rutaAbsoluta);
+      const pdfBytes = await leerArchivoPdf(plano.urlPdf);
+      if (!pdfBytes) {
+        return NextResponse.json({ error: "PDF original no disponible" }, { status: 500 });
+      }
       const pdfDoc = await PDFDocument.load(pdfBytes);
 
       const paginaAcuse = pdfDoc.addPage([612, 792]);
@@ -155,9 +165,13 @@ export async function POST(req, { params }) {
       });
       y -= 25;
 
-      const firmaBase64Data = firmaBase64.replace(/^data:image\/png;base64,/, "");
-      const firmaBytes = Buffer.from(firmaBase64Data, "base64");
-      const firmaImg = await pdfDoc.embedPng(firmaBytes);
+      let firmaImg;
+      try {
+        firmaImg = await pdfDoc.embedPng(firmaBuffer);
+      } catch (errEmbed) {
+        console.error("[autorizar-cliente] embedPng falló", errEmbed);
+        return NextResponse.json({ error: "No se pudo procesar la firma" }, { status: 400 });
+      }
 
       paginaAcuse.drawText("FIRMA DEL CLIENTE:", {
         x: 72, y, size: 10, font: helveticaBold, color: colorDato,
@@ -210,10 +224,9 @@ export async function POST(req, { params }) {
       });
 
       const pdfFirmadoBytes = await pdfDoc.save();
-      const carpetaUploads = path.join(process.cwd(), "public", "uploads", "planos");
-      await mkdir(carpetaUploads, { recursive: true });
+      await mkdir(DIRECTORIO_PLANOS, { recursive: true });
       const nombreFirmado = `plano-${planoId}-firmado-${Date.now()}.pdf`;
-      const rutaFirmado = path.join(carpetaUploads, nombreFirmado);
+      const rutaFirmado = path.join(DIRECTORIO_PLANOS, nombreFirmado);
       await writeFile(rutaFirmado, pdfFirmadoBytes);
       urlPdfFirmado = `/uploads/planos/${nombreFirmado}`;
     }
@@ -224,7 +237,7 @@ export async function POST(req, { params }) {
           planoId,
           decision,
           firmadoPor: decision === "APROBADO" ? firmadoPor.trim() : "Cliente",
-          firmaBase64: firmaBase64 || null,
+          firmaBase64: null,
           urlPdfFirmado,
           comentarios: comentarios?.trim() || null,
           ipCliente,
@@ -233,6 +246,13 @@ export async function POST(req, { params }) {
       await tx.clave.update({
         where: { id: plano.claveId },
         data: { estatus: nuevoEstatus, updatedAt: new Date() },
+      });
+
+      await registrarAuditoria(tx, {
+        actor: decision === "APROBADO" ? `Cliente: ${firmadoPor.trim()}` : "Cliente",
+        accion: decision === "APROBADO" ? "CLIENTE_APROBO" : "CLIENTE_RECHAZO",
+        detalle: `Plano #${planoId} (clave ${plano.clave.codigo})${decision === "RECHAZADO" && comentarios ? ` — ${comentarios.trim()}` : ""}`,
+        ip: ipCliente,
       });
     });
 

@@ -71,7 +71,8 @@ export async function DELETE(req, { params }) {
     return NextResponse.json({ error: "Solo gerentes pueden eliminar claves" }, { status: 403 });
   }
 
-  const id = parseInt(params.id);
+  const { id: paramId } = await params;
+  const id = parseInt(paramId);
   if (isNaN(id)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
   try {

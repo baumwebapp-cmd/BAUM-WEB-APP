@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import { DIRECTORIO_PLANOS, esPdfValido } from "@/lib/archivos";
 
 export async function POST(req) {
   const sesion = await getServerSession(authOptions);
@@ -68,12 +69,19 @@ export async function POST(req) {
     });
     const nuevaVersion = (ultimoPlano?.version ?? 0) + 1;
 
-    const carpetaUploads = path.join(process.cwd(), "public", "uploads", "planos");
-    await mkdir(carpetaUploads, { recursive: true });
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+
+    if (!esPdfValido(buffer)) {
+      return NextResponse.json(
+        { error: "El archivo no es un PDF válido" },
+        { status: 400 }
+      );
+    }
+
+    await mkdir(DIRECTORIO_PLANOS, { recursive: true });
 
     const nombreArchivo = `plano-${claveId}-v${nuevaVersion}-${Date.now()}.pdf`;
-    const rutaArchivo = path.join(carpetaUploads, nombreArchivo);
-    const buffer = Buffer.from(await archivo.arrayBuffer());
+    const rutaArchivo = path.join(DIRECTORIO_PLANOS, nombreArchivo);
     await writeFile(rutaArchivo, buffer);
 
     const urlPdf = `/uploads/planos/${nombreArchivo}`;

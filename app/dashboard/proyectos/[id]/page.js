@@ -9,6 +9,7 @@ import {
   Copy, ExternalLink, FileText, Clock, User, AlertTriangle, Link,
   Settings, Check, Minus,
 } from "lucide-react";
+import { urlPdfPlano } from "@/lib/urlPdf";
 
 
 function formatFechaCorta(fecha) {
@@ -524,7 +525,7 @@ function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
             <span style={{ fontSize: 11, color: "#9ca3af" }}>
               {new Date(plano.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" })}
             </span>
-            <a href={plano.urlPdf} target="_blank" rel="noopener noreferrer"
+            <a href={urlPdfPlano(plano.id)} target="_blank" rel="noopener noreferrer"
               style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "#c9a84c", textDecoration: "none", padding: "2px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 5 }}>
               <ExternalLink size={10} /> Ver PDF
             </a>
@@ -745,7 +746,7 @@ function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
               <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>
                 {new Date(plano.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" })}
               </div>
-              <a href={plano.urlPdf} target="_blank" rel="noopener noreferrer"
+              <a href={urlPdfPlano(plano.id)} target="_blank" rel="noopener noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 11, color: "#c9a84c", textDecoration: "none", padding: "2px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 5 }}>
                 <ExternalLink size={10} /> Ver PDF
               </a>
@@ -1016,9 +1017,9 @@ function ModalAccionJefe({ plano, clave, autorizadoPorMi, onCerrar, onAutorizar,
           <>
             <div style={{ padding: "16px 24px", flex: 1 }}>
               <div style={{ border: "1px solid #e5e5e5", borderRadius: 8, overflow: "hidden", height: 400, background: "#f9fafb" }}>
-                <iframe src={plano.urlPdf} width="100%" height="100%" style={{ border: "none", display: "block" }} title="Plano PDF" />
+                <iframe src={urlPdfPlano(plano.id)} width="100%" height="100%" style={{ border: "none", display: "block" }} title="Plano PDF" />
               </div>
-              <a href={plano.urlPdf} target="_blank" rel="noopener noreferrer"
+              <a href={urlPdfPlano(plano.id)} target="_blank" rel="noopener noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 10, fontSize: 12, color: "#c9a84c", textDecoration: "none" }}>
                 <ExternalLink size={12} /> Abrir en nueva pestaña
               </a>
@@ -1139,13 +1140,13 @@ function ModalAccionCostos({ plano, clave, ejecutando, onCerrar, onConfirmado, o
             <div style={{ padding: "16px 24px", flex: 1 }}>
               {plano && (
                 <div style={{ border: "1px solid #e5e5e5", borderRadius: 8, overflow: "hidden", height: 350, background: "#f9fafb" }}>
-                  <iframe src={plano.autorizacionCliente?.urlPdfFirmado || plano.urlPdf} width="100%" height="100%" style={{ border: "none", display: "block" }} title="Plano PDF" />
+                  <iframe src={urlPdfPlano(plano.id, { tipo: plano.autorizacionCliente?.urlPdfFirmado ? "firmado" : "original" })} width="100%" height="100%" style={{ border: "none", display: "block" }} title="Plano PDF" />
                 </div>
               )}
 
               {plano?.autorizacionCliente?.urlPdfFirmado && (
                 <a
-                  href={plano.autorizacionCliente.urlPdfFirmado}
+                  href={urlPdfPlano(plano.id, { tipo: "firmado" })}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12, fontSize: 13, fontWeight: 600, color: "#c9a84c", textDecoration: "none", padding: "8px 14px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8 }}
@@ -1242,7 +1243,7 @@ function ModalAccionProduccion({ plano, clave, ejecutando, onCerrar, onConfirmad
                 <span style={{ fontSize: 12, color: "#6b7280" }}>· Subido por {plano.subidoPor.nombre}</span>
               )}
             </div>
-            <a href={plano.urlPdf} target="_blank" rel="noopener noreferrer"
+            <a href={urlPdfPlano(plano.id)} target="_blank" rel="noopener noreferrer"
               style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: 12, color: "#c9a84c", textDecoration: "none", padding: "5px 10px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6 }}>
               <ExternalLink size={12} /> Ver PDF
             </a>
@@ -1323,9 +1324,9 @@ function ModalLectura({ nodo, clave, plano, autInternas, autCliente, gerentesPro
           <>
             <LineaTexto>Aprobado por: <strong>{autCliente.firmadoPor}</strong></LineaTexto>
             <LineaTexto>Fecha: {fmt(autCliente.createdAt)}</LineaTexto>
-            {autCliente.urlPdfFirmado && (
+            {autCliente.urlPdfFirmado && plano?.id && (
               <a
-                href={autCliente.urlPdfFirmado}
+                href={urlPdfPlano(plano.id, { tipo: "firmado" })}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

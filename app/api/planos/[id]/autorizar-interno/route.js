@@ -3,8 +3,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import { DIRECTORIO_PLANOS, leerArchivoPdf } from "@/lib/archivos";
+import { registrarAuditoria, obtenerIpAuditoria } from "@/lib/auditoria";
 
 export async function POST(req, { params }) {
   const sesion = await getServerSession(authOptions);
@@ -56,6 +58,9 @@ export async function POST(req, { params }) {
     const totalAutorizados = plano.autorizacionesInternas.length + 1;
     const todosAutorizaron = totalAutorizados >= totalGerentes;
 
+    const ip = obtenerIpAuditoria(req);
+    const detalleAuditoria = `Plano #${planoId} (clave ${plano.clave.codigo}) — autorización ${totalAutorizados}/${totalGerentes}${todosAutorizaron ? " (enviado al cliente)" : ""}`;
+
     const resultado = await prisma.$transaction(async (tx) => {
       const auth = await tx.autorizacionInterna.create({
         data: {
@@ -72,6 +77,13 @@ export async function POST(req, { params }) {
         });
       }
 
+      await registrarAuditoria(tx, {
+        usuarioId: gerenteId,
+        accion: todosAutorizaron ? "AUTORIZAR_INTERNO_FINAL" : "AUTORIZAR_INTERNO",
+        detalle: detalleAuditoria,
+        ip,
+      });
+
       return { auth };
     });
 
@@ -79,8 +91,8 @@ export async function POST(req, { params }) {
 
     if (todosAutorizaron && plano.urlPdf?.startsWith("/uploads/")) {
       try {
-        const rutaOriginal = path.join(process.cwd(), "public", plano.urlPdf);
-        const pdfBytes = await readFile(rutaOriginal);
+        const pdfBytes = await leerArchivoPdf(plano.urlPdf);
+        if (!pdfBytes) throw new Error("PDF original no encontrado en almacenamiento");
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -103,10 +115,9 @@ export async function POST(req, { params }) {
         }
 
         const pdfMarcaBytes = await pdfDoc.save();
-        const carpetaUploads = path.join(process.cwd(), "public", "uploads", "planos");
-        await mkdir(carpetaUploads, { recursive: true });
+        await mkdir(DIRECTORIO_PLANOS, { recursive: true });
         const nombreMarca = `plano-${planoId}-watermark-${Date.now()}.pdf`;
-        const rutaMarca = path.join(carpetaUploads, nombreMarca);
+        const rutaMarca = path.join(DIRECTORIO_PLANOS, nombreMarca);
         await writeFile(rutaMarca, pdfMarcaBytes);
         urlPdfActualizada = `/uploads/planos/${nombreMarca}`;
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { CheckCircle, XCircle, FileText, Clock, RotateCcw, Pen, ShieldCheck } from "lucide-react";
+import { urlPdfCliente } from "@/lib/urlPdf";
 
 const ETIQUETA_CLIENTE = {
   ENVIADO: "Pendiente de revisión",
@@ -144,6 +145,7 @@ export default function ClientePage() {
         <ModalRevisar
           clave={modalRevisar.clave}
           plano={modalRevisar.plano}
+          pin={pin}
           esMobil={esMobil}
           clienteContacto={proyecto.clienteContacto}
           onCerrar={() => setModalRevisar(null)}
@@ -206,7 +208,7 @@ function CardClavePendiente({ clave, plano, onRevisar }) {
   );
 }
 
-function ModalRevisar({ clave, plano, esMobil, clienteContacto, onCerrar, onCompletado }) {
+function ModalRevisar({ clave, plano, pin, esMobil, clienteContacto, onCerrar, onCompletado }) {
   const [vista, setVista] = useState("ver");
 
   return (
@@ -224,7 +226,7 @@ function ModalRevisar({ clave, plano, esMobil, clienteContacto, onCerrar, onComp
           <>
             <div style={{ padding: 14, userSelect: "none", WebkitUserSelect: "none" }}>
               <iframe
-                src={`${plano.urlPdf}#toolbar=0&navpanes=0&scrollbar=0`}
+                src={`${urlPdfCliente(pin, plano.id)}#toolbar=0&navpanes=0&scrollbar=0`}
                 style={{ width: "100%", height: esMobil ? 400 : 500, border: "none", display: "block" }}
                 title={`Plano ${clave.codigo}`}
               />

@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { registrarAuditoria, obtenerIpAuditoria } from "@/lib/auditoria";
 
 export async function POST(req, { params }) {
   const sesion = await getServerSession(authOptions);
@@ -53,6 +54,8 @@ export async function POST(req, { params }) {
       return NextResponse.json({ error: "Ya tomaste una decisión sobre este plano" }, { status: 409 });
     }
 
+    const ip = obtenerIpAuditoria(req);
+
     await prisma.$transaction(async (tx) => {
       await tx.autorizacionInterna.create({
         data: {
@@ -66,6 +69,13 @@ export async function POST(req, { params }) {
       await tx.clave.update({
         where: { id: plano.claveId },
         data: { estatus: "RECHAZADO", updatedAt: new Date() },
+      });
+
+      await registrarAuditoria(tx, {
+        usuarioId: gerenteId,
+        accion: "RECHAZAR_INTERNO",
+        detalle: `Plano #${planoId} (clave ${plano.clave.codigo}): ${comentarios.trim()}`,
+        ip,
       });
     });
 

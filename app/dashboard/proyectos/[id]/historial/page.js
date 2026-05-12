@@ -7,6 +7,7 @@ import {
   ArrowLeft, Upload, CheckCircle, XCircle, Send,
   AlertTriangle, Download, Package, FileText,
 } from "lucide-react";
+import { urlPdfPlano } from "@/lib/urlPdf";
 
 /* ── Configuración de tipos de evento ────────────────── */
 const TIPO_CONFIG = {
@@ -332,9 +333,9 @@ export default function HistorialPage() {
                         "{ev.comentarios}"
                       </p>
                     )}
-                    {ev.tipo === "CLIENTE_APROBO" && ev.urlPdfFirmado && (
+                    {ev.tipo === "CLIENTE_APROBO" && ev.tieneFirmado && ev.planoId && (
                       <a
-                        href={ev.urlPdfFirmado}
+                        href={urlPdfPlano(ev.planoId, { tipo: "firmado" })}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
