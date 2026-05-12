@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -85,7 +84,7 @@ export default function LoginPage() {
 
         {/* Logo texto centrado */}
         <div style={{ textAlign: "center", zIndex: 1 }}>
-          <Image
+          <img
             src="/baum_logo_bco.svg"
             alt="Baum Industria Carpintera"
             width={380}
@@ -130,7 +129,7 @@ export default function LoginPage() {
           overflow: "hidden",
           padding: 16,
         }}>
-          <Image
+          <img
             src="/isotipo_baum_bco.svg"
             alt="Baum"
             width={58}
