@@ -2,6 +2,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
+import { readFile, writeFile, mkdir } from "fs/promises";
+import path from "path";
 
 export async function POST(req, { params }) {
   const sesion = await getServerSession(authOptions);
@@ -49,6 +52,10 @@ export async function POST(req, { params }) {
       return NextResponse.json({ error: "Ya autorizaste este plano" }, { status: 409 });
     }
 
+    const totalGerentes = plano.clave.proyecto.gerentes.length;
+    const totalAutorizados = plano.autorizacionesInternas.length + 1;
+    const todosAutorizaron = totalAutorizados >= totalGerentes;
+
     const resultado = await prisma.$transaction(async (tx) => {
       const auth = await tx.autorizacionInterna.create({
         data: {
@@ -58,10 +65,6 @@ export async function POST(req, { params }) {
         },
       });
 
-      const totalGerentes = plano.clave.proyecto.gerentes.length;
-      const totalAutorizados = plano.autorizacionesInternas.length + 1;
-      const todosAutorizaron = totalAutorizados >= totalGerentes;
-
       if (todosAutorizaron) {
         await tx.clave.update({
           where: { id: plano.claveId },
@@ -69,17 +72,64 @@ export async function POST(req, { params }) {
         });
       }
 
-      return {
-        auth,
-        totalAutorizados,
-        totalGerentes,
-        ...(todosAutorizaron
-          ? { clienteUrl: `${process.env.NEXT_PUBLIC_APP_URL}/cliente/${plano.clave.proyecto.pinAcceso}` }
-          : {}),
-      };
+      return { auth };
     });
 
-    return NextResponse.json(resultado);
+    let urlPdfActualizada = null;
+
+    if (todosAutorizaron && plano.urlPdf?.startsWith("/uploads/")) {
+      try {
+        const rutaOriginal = path.join(process.cwd(), "public", plano.urlPdf);
+        const pdfBytes = await readFile(rutaOriginal);
+        const pdfDoc = await PDFDocument.load(pdfBytes);
+        const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+        const clienteNombre = plano.clave.proyecto.clienteNombre;
+        const fechaEnvio = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+        const textoMarca = `CONFIDENCIAL — ${clienteNombre} — ${fechaEnvio}`;
+
+        const paginas = pdfDoc.getPages();
+        for (const pagina of paginas) {
+          const { width, height } = pagina.getSize();
+          pagina.drawText(textoMarca, {
+            x: width / 2 - 150,
+            y: height / 2,
+            size: 40,
+            font: helveticaBold,
+            color: rgb(0.8, 0.8, 0.8),
+            opacity: 0.15,
+            rotate: degrees(45),
+          });
+        }
+
+        const pdfMarcaBytes = await pdfDoc.save();
+        const carpetaUploads = path.join(process.cwd(), "public", "uploads", "planos");
+        await mkdir(carpetaUploads, { recursive: true });
+        const nombreMarca = `plano-${planoId}-watermark-${Date.now()}.pdf`;
+        const rutaMarca = path.join(carpetaUploads, nombreMarca);
+        await writeFile(rutaMarca, pdfMarcaBytes);
+        urlPdfActualizada = `/uploads/planos/${nombreMarca}`;
+
+        await prisma.plano.update({
+          where: { id: planoId },
+          data: { urlPdf: urlPdfActualizada },
+        });
+      } catch (errMarca) {
+        console.error("[autorizar-interno] Error al aplicar marca de agua:", errMarca);
+      }
+    }
+
+    return NextResponse.json({
+      auth: resultado.auth,
+      totalAutorizados,
+      totalGerentes,
+      ...(todosAutorizaron
+        ? {
+            clienteUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/cliente/${plano.clave.proyecto.pinAcceso}`,
+            urlPdf: urlPdfActualizada,
+          }
+        : {}),
+    });
   } catch (error) {
     console.error("[POST /api/planos/[id]/autorizar-interno]", error);
     return NextResponse.json({ error: "Error al autorizar el plano" }, { status: 500 });

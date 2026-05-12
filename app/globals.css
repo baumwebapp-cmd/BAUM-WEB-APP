@@ -352,6 +352,14 @@ svg {
   .dashboard-main {
     margin-left: 0;
   }
+  .modal-overlay {
+    padding: 8px;
+  }
+  .modal-contenido {
+    width: 95%;
+    max-width: 95%;
+    padding: 22px;
+  }
 }
 
 /* Ocultar indicador de Next.js */

@@ -58,7 +58,7 @@ export async function PATCH(req, { params }) {
 
   try {
     const body = await req.json();
-    const { nombre, clienteNombre, estatus, gerentesIds, pinAcceso } = body;
+    const { nombre, clienteNombre, clienteContacto, estatus, gerentesIds, pinAcceso } = body;
 
     if (gerentesIds !== undefined && gerentesIds.length > 1) {
       return NextResponse.json({ error: "Solo se puede asignar un gerente por proyecto" }, { status: 400 });
@@ -67,6 +67,7 @@ export async function PATCH(req, { params }) {
     const datos = {};
     if (nombre !== undefined) datos.nombre = nombre.trim();
     if (clienteNombre !== undefined) datos.clienteNombre = clienteNombre.trim();
+    if (clienteContacto !== undefined) datos.clienteContacto = clienteContacto?.trim() || null;
     if (estatus !== undefined) datos.estatus = estatus;
     if (pinAcceso !== undefined) {
       const pinExistente = await prisma.proyecto.findFirst({

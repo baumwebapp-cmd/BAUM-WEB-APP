@@ -2,6 +2,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
 
 export async function POST(req) {
   const sesion = await getServerSession(authOptions);
@@ -17,6 +19,7 @@ export async function POST(req) {
     const formData = await req.formData();
     const archivo = formData.get("file");
     const claveId = parseInt(formData.get("claveId"));
+    const comentariosCostos = (formData.get("comentariosCostos") || "").toString();
 
     if (!archivo || typeof archivo === "string") {
       return NextResponse.json({ error: "Archivo requerido" }, { status: 400 });
@@ -29,6 +32,12 @@ export async function POST(req) {
     }
     if (archivo.size > 50 * 1024 * 1024) {
       return NextResponse.json({ error: "El archivo no puede superar 50 MB" }, { status: 400 });
+    }
+    if (!comentariosCostos.trim() || comentariosCostos.trim().length < 10) {
+      return NextResponse.json(
+        { error: "Los comentarios para Costos son obligatorios (mínimo 10 caracteres)" },
+        { status: 400 }
+      );
     }
 
     const clave = await prisma.clave.findUnique({
@@ -59,10 +68,15 @@ export async function POST(req) {
     });
     const nuevaVersion = (ultimoPlano?.version ?? 0) + 1;
 
-    /* Convertir archivo a base64 para guardar temporalmente */
-    const buffer = await archivo.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString("base64");
-    const urlPdf = `data:application/pdf;base64,${base64}`;
+    const carpetaUploads = path.join(process.cwd(), "public", "uploads", "planos");
+    await mkdir(carpetaUploads, { recursive: true });
+
+    const nombreArchivo = `plano-${claveId}-v${nuevaVersion}-${Date.now()}.pdf`;
+    const rutaArchivo = path.join(carpetaUploads, nombreArchivo);
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+    await writeFile(rutaArchivo, buffer);
+
+    const urlPdf = `/uploads/planos/${nombreArchivo}`;
 
     const plano = await prisma.$transaction(async (tx) => {
       const nuevo = await tx.plano.create({
@@ -71,6 +85,7 @@ export async function POST(req) {
           version: nuevaVersion,
           urlPdf,
           subidoPorId: parseInt(usuarioId),
+          comentariosCostos: comentariosCostos.trim(),
         },
         include: {
           subidoPor: { select: { nombre: true } },

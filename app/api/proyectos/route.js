@@ -40,7 +40,7 @@ export async function POST(req) {
 
   try {
     const body = await req.json();
-    const { nombre, clienteNombre, gerentesIds = [] } = body;
+    const { nombre, clienteNombre, clienteContacto, gerentesIds = [] } = body;
 
     if (!nombre?.trim()) return NextResponse.json({ error: "El nombre es requerido" }, { status: 400 });
     if (!clienteNombre?.trim()) return NextResponse.json({ error: "El nombre del cliente es requerido" }, { status: 400 });
@@ -59,6 +59,7 @@ export async function POST(req) {
       data: {
         nombre: nombre.trim(),
         clienteNombre: clienteNombre.trim(),
+        clienteContacto: clienteContacto?.trim() || null,
         pinAcceso,
         gerentes: {
           create: gerentesIds.map((id) => ({ usuarioId: parseInt(id) })),

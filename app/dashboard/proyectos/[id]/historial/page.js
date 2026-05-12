@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   ArrowLeft, Upload, CheckCircle, XCircle, Send,
-  AlertTriangle, Download, Package,
+  AlertTriangle, Download, Package, FileText,
 } from "lucide-react";
 
 /* ── Configuración de tipos de evento ────────────────── */
@@ -331,6 +331,28 @@ export default function HistorialPage() {
                       <p style={{ margin: "6px 0 0", fontSize: 13, color: "#666666", fontStyle: "italic", lineHeight: 1.5, borderLeft: "3px solid #fca5a5", paddingLeft: 10 }}>
                         "{ev.comentarios}"
                       </p>
+                    )}
+                    {ev.tipo === "CLIENTE_APROBO" && ev.urlPdfFirmado && (
+                      <a
+                        href={ev.urlPdfFirmado}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "8px 16px",
+                          borderRadius: 8,
+                          background: "#212121",
+                          color: "#c9a84c",
+                          fontSize: 13,
+                          fontWeight: 500,
+                          textDecoration: "none",
+                          marginTop: 12,
+                        }}
+                      >
+                        <FileText size={14} /> Ver PDF firmado por cliente
+                      </a>
                     )}
                   </div>
                 </div>

@@ -224,6 +224,17 @@ export default function DashboardLayout({ children }) {
     return () => window.removeEventListener("resize", actualizar);
   }, []);
 
+  useEffect(() => {
+    if (!esDesktop && sidebarAbierto) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [sidebarAbierto, esDesktop]);
+
   if (status === "loading") {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f5" }}>
@@ -249,7 +260,15 @@ export default function DashboardLayout({ children }) {
       {!esDesktop && sidebarAbierto && (
         <div
           onClick={() => setSidebarAbierto(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 40 }}
+          onTouchStart={() => setSidebarAbierto(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            zIndex: 40,
+            cursor: "pointer",
+            WebkitOverflowScrolling: "touch",
+          }}
         />
       )}
 

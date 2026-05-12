@@ -65,7 +65,7 @@ export async function POST(req, { params }) {
 
       await tx.clave.update({
         where: { id: plano.claveId },
-        data: { estatus: "RECHAZADO" },
+        data: { estatus: "RECHAZADO", updatedAt: new Date() },
       });
     });
 

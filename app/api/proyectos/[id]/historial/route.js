@@ -38,7 +38,15 @@ export async function GET(req, { params }) {
               include: { gerente: { select: { nombre: true } } },
               orderBy: { createdAt: "asc" },
             },
-            autorizacionCliente: true,
+            autorizacionCliente: {
+              select: {
+                decision: true,
+                firmadoPor: true,
+                comentarios: true,
+                urlPdfFirmado: true,
+                createdAt: true,
+              },
+            },
           },
           orderBy: { version: "asc" },
         },
@@ -106,6 +114,7 @@ export async function GET(req, { params }) {
               descripcion: `Cliente aprobó ${clave.codigo} — firmado por: ${ac.firmadoPor}`,
               responsable: ac.firmadoPor,
               comentarios: null,
+              urlPdfFirmado: ac.urlPdfFirmado || null,
               clave: clave.codigo,
               fecha: ac.createdAt,
             });

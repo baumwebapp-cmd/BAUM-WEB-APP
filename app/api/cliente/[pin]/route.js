@@ -15,6 +15,7 @@ export async function GET(req, { params }) {
         id: true,
         nombre: true,
         clienteNombre: true,
+        clienteContacto: true,
         estatus: true,
         createdAt: true,
         claves: {

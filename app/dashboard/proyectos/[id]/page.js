@@ -10,11 +10,6 @@ import {
   Settings, Check, Minus,
 } from "lucide-react";
 
-function getAppUrl() {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (typeof window !== "undefined") return window.location.origin;
-  return "";
-}
 
 function formatFechaCorta(fecha) {
   if (!fecha) return null;
@@ -87,7 +82,7 @@ function calcularPipeline(clave, plano) {
       if (rechazoCliente) {
         const ultimo = aprobadosInternos.slice(-1)[0];
         return {
-          jefe:      nodo("COMPLETADO", ultimo?.gerente?.nombre?.split(" ")[0] || null, formatFechaCorta(ultimo?.createdAt)),
+          jefe:      nodo("RECHAZADO", ultimo?.gerente?.nombre?.split(" ")[0] || null, formatFechaCorta(ultimo?.createdAt)),
           cliente:   nodo("RECHAZADO", autCliente.firmadoPor, formatFechaCorta(autCliente.createdAt), autCliente.comentarios),
           costos:    nodo("PENDIENTE"),
           produccion: nodo("PENDIENTE"),
@@ -151,8 +146,6 @@ export default function ProyectoDetallePage() {
   const [proyecto, setProyecto] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
-  const [clienteUrl, setClienteUrl] = useState(null);
-
   const [modalPin, setModalPin] = useState(false);
   const [modalEditarProyecto, setModalEditarProyecto] = useState(false);
   const [modalCrearClave, setModalCrearClave] = useState(false);
@@ -201,28 +194,13 @@ export default function ProyectoDetallePage() {
   );
   if (!proyecto) return null;
 
-  const esGerente = rol === "GERENTE";
-  const puedeCrearClave = rol === "GERENTE" || rol === "DISENADOR";
+  const esGerente = rol === "GERENTE" || rol === "DUENO" || rol === "SUPERADMIN";
+  const puedeCrearClave = rol === "GERENTE" || rol === "DISENADOR" || rol === "DUENO" || rol === "SUPERADMIN";
   const puedeSubir = rol === "DISENADOR";
   const gerentesProyecto = proyecto.gerentes?.map((g) => g.usuario) || [];
 
   return (
     <div style={{ maxWidth: 1300, margin: "0 auto" }}>
-      {clienteUrl && (
-        <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 10, padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <Link size={18} style={{ color: "#0369a1", flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 700, color: "#0369a1" }}>¡Todos los gerentes autorizaron! Comparte este link con el cliente:</p>
-            <span style={{ fontSize: 12, color: "#0369a1", wordBreak: "break-all" }}>{clienteUrl}</span>
-          </div>
-          <button onClick={() => navigator.clipboard.writeText(clienteUrl)}
-            style={{ background: "#0369a1", border: "none", borderRadius: 6, padding: "7px 14px", color: "#ffffff", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-            <Copy size={13} /> Copiar
-          </button>
-          <button onClick={() => setClienteUrl(null)}
-            style={{ background: "transparent", border: "none", color: "#0369a1", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
-        </div>
-      )}
 
       {/* Barra superior */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
@@ -266,14 +244,17 @@ export default function ProyectoDetallePage() {
             </p>
           </div>
           {esGerente && proyecto.pinAcceso && (
-            <PinDisplay pin={proyecto.pinAcceso} onCambiar={() => setModalPin(true)} />
+            <PinDisplay pin={proyecto.pinAcceso} onCambiar={() => setModalPin(true)} esMobil={esMobil} />
           )}
         </div>
         <div style={{ height: 1, background: "#f0f0f0" }} />
         <div style={{ padding: "12px 24px", display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
           <GrupoUsuarios titulo="Gerentes" usuarios={gerentesProyecto} />
           {esGerente && proyecto.pinAcceso && (
-            <CopiarLinkCliente pin={proyecto.pinAcceso} />
+            <CopiarLinkCliente
+              pin={proyecto.pinAcceso}
+              habilitado={proyecto.claves?.some(c => ["ENVIADO","AUTORIZADO","LIBERADO","EN_PRODUCCION"].includes(c.estatus)) ?? false}
+            />
           )}
         </div>
       </div>
@@ -308,7 +289,6 @@ export default function ProyectoDetallePage() {
               puedeSubir={puedeSubir}
               onSubirPlano={() => setModalSubirPlano(clave.id)}
               onRefresh={cargar}
-              onClienteUrl={setClienteUrl}
             />
           ))}
         </div>
@@ -336,7 +316,6 @@ export default function ProyectoDetallePage() {
                     puedeSubir={puedeSubir}
                     onSubirPlano={() => setModalSubirPlano(clave.id)}
                     onRefresh={cargar}
-                    onClienteUrl={setClienteUrl}
                   />
                 ))}
               </tbody>
@@ -362,23 +341,30 @@ export default function ProyectoDetallePage() {
 }
 
 /* ── Pipeline simplificado para móvil ── */
-function PipelineSimple({ pipeline, jefeClicable, costosClicable, produccionClicable, onClickJefe, onClickCostos, onClickProduccion, onVerComentario }) {
+function PipelineSimple({ pipeline, jefeClicable, clienteClicable, costosClicable, produccionClicable, onClickJefe, onClickCliente, onClickCostos, onClickProduccion, onVerComentario }) {
   const COLOR_NODO = { PENDIENTE: "#e5e7eb", EN_PROCESO: "#c9a84c", COMPLETADO: "#10b981", RECHAZADO: "#ef4444" };
   const NODOS = [
     { key: "jefe",       label: "Jefe área",  nodo: pipeline.jefe,       clicable: jefeClicable,       onClick: onClickJefe },
-    { key: "cliente",    label: "Cliente",    nodo: pipeline.cliente,    clicable: false },
+    { key: "cliente",    label: "Cliente",    nodo: pipeline.cliente,    clicable: clienteClicable,    onClick: onClickCliente },
     { key: "costos",     label: "Costos",     nodo: pipeline.costos,     clicable: costosClicable,     onClick: onClickCostos },
     { key: "produccion", label: "Producción", nodo: pipeline.produccion, clicable: produccionClicable, onClick: onClickProduccion },
   ];
   return (
     <div style={{ display: "flex", alignItems: "flex-start" }}>
-      {NODOS.map(({ key, label, nodo, clicable, onClick }, idx) => (
+      {NODOS.map(({ key, label, nodo, clicable, onClick }, idx) => {
+        const colorIzq = idx > 0
+          ? (nodo.estado === "RECHAZADO" ? "#ef4444" : NODOS[idx - 1].nodo.estado === "COMPLETADO" ? "#10b981" : "#e5e7eb")
+          : null;
+        const colorDer = idx < 3
+          ? (NODOS[idx + 1].nodo.estado === "RECHAZADO" ? "#ef4444" : nodo.estado === "COMPLETADO" ? "#10b981" : "#e5e7eb")
+          : null;
+        return (
         <div key={key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
           {idx > 0 && (
-            <div style={{ position: "absolute", right: "50%", top: 9, left: 0, height: 2, background: NODOS[idx - 1].nodo.estado === "COMPLETADO" ? "#10b981" : "#e5e7eb" }} />
+            <div style={{ position: "absolute", right: "50%", top: 9, left: 0, height: 2, background: colorIzq }} />
           )}
           {idx < 3 && (
-            <div style={{ position: "absolute", left: "50%", top: 9, right: 0, height: 2, background: nodo.estado === "COMPLETADO" ? "#10b981" : "#e5e7eb" }} />
+            <div style={{ position: "absolute", left: "50%", top: 9, right: 0, height: 2, background: colorDer }} />
           )}
           <div
             onClick={clicable ? onClick : undefined}
@@ -405,29 +391,34 @@ function PipelineSimple({ pipeline, jefeClicable, costosClicable, produccionClic
             </button>
           )}
         </div>
-      ))}
+      );
+      })}
     </div>
   );
 }
 
 /* ── Card de clave para móvil ── */
-function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSubir, onSubirPlano, onRefresh, onClienteUrl }) {
+function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSubir, onSubirPlano, onRefresh }) {
   const [accionando, setAccionando] = useState(false);
   const [toast, setToast] = useState(null);
   const [modalComentario, setModalComentario] = useState(null);
   const [modalJefe, setModalJefe] = useState(false);
   const [modalCostos, setModalCostos] = useState(false);
   const [modalProduccion, setModalProduccion] = useState(false);
+  const [modalLectura, setModalLectura] = useState(null);
 
   const plano = clave.planos?.[0] || null;
   const autInternas = plano?.autorizacionesInternas || [];
+  const autCliente = plano?.autorizacionCliente || null;
   const autorizadoPorMi = autInternas.some((a) => a.gerente?.id === usuarioId && a.decision === "APROBADO");
 
   const pipeline = calcularPipeline(clave, plano);
+  const cli = calcularClicabilidad(rol, clave, autorizadoPorMi);
 
-  const jefeClicable = rol === "GERENTE" && pipeline.jefe.estado === "EN_PROCESO" && !autorizadoPorMi;
-  const costosClicable = rol === "COSTOS" && pipeline.costos.estado === "EN_PROCESO";
-  const produccionClicable = rol === "PRODUCCION" && pipeline.produccion.estado === "EN_PROCESO";
+  function onClickJefe()       { if (cli.jefeAccion) setModalJefe(true);             else if (cli.jefeClicable) setModalLectura("jefe"); }
+  function onClickCliente()    { if (cli.clienteClicable) setModalLectura("cliente"); }
+  function onClickCostos()     { if (cli.costosAccion) setModalCostos(true);          else if (cli.costosClicable) setModalLectura("costos"); }
+  function onClickProduccion() { if (cli.produccionAccion) setModalProduccion(true);  else if (cli.produccionClicable) setModalLectura("produccion"); }
 
   async function ejecutarAccion(url, method, body, mensajeExito) {
     setAccionando(true);
@@ -435,7 +426,6 @@ function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) { setToast({ tipo: "error", titulo: "Error al procesar", mensaje: data.error || "Error" }); return false; }
-      if (data.clienteUrl) onClienteUrl(data.clienteUrl);
       setToast({ tipo: "exito", titulo: mensajeExito });
       setTimeout(() => { setToast(null); onRefresh(); }, 2000);
       return true;
@@ -477,6 +467,7 @@ function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
       {modalCostos && plano && (
         <Portal>
           <ModalAccionCostos
+            plano={plano}
             clave={clave}
             ejecutando={accionando}
             onCerrar={() => setModalCostos(false)}
@@ -484,12 +475,18 @@ function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
               const ok = await ejecutarAccion(`/api/planos/${plano.id}/liberar`, "POST", {}, "¡Plano liberado a producción!");
               if (ok) setModalCostos(false);
             }}
+            onRechazado={() => {
+              setModalCostos(false);
+              setToast({ tipo: "exito", titulo: "Plano rechazado por Costos. El diseñador deberá corregir." });
+              setTimeout(() => { setToast(null); onRefresh(); }, 2500);
+            }}
           />
         </Portal>
       )}
       {modalProduccion && (
         <Portal>
           <ModalAccionProduccion
+            plano={plano}
             clave={clave}
             ejecutando={accionando}
             onCerrar={() => setModalProduccion(false)}
@@ -539,17 +536,19 @@ function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
         {/* Pipeline simplificado */}
         <PipelineSimple
           pipeline={pipeline}
-          jefeClicable={jefeClicable}
-          costosClicable={costosClicable}
-          produccionClicable={produccionClicable}
-          onClickJefe={() => setModalJefe(true)}
-          onClickCostos={() => setModalCostos(true)}
-          onClickProduccion={() => setModalProduccion(true)}
+          jefeClicable={cli.jefeClicable}
+          clienteClicable={cli.clienteClicable}
+          costosClicable={cli.costosClicable}
+          produccionClicable={cli.produccionClicable}
+          onClickJefe={onClickJefe}
+          onClickCliente={onClickCliente}
+          onClickCostos={onClickCostos}
+          onClickProduccion={onClickProduccion}
           onVerComentario={setModalComentario}
         />
 
         {/* Botón de acción */}
-        {(puedeSubirPrimero || puedeSubirNuevo || jefeClicable || costosClicable || produccionClicable) && (
+        {(puedeSubirPrimero || puedeSubirNuevo || cli.jefeAccion || cli.costosAccion || cli.produccionAccion) && (
           <div style={{ marginTop: 14 }}>
             {puedeSubirPrimero && (
               <button onClick={onSubirPlano} style={{ ...sBtnPlano("#3b82f6"), width: "100%", justifyContent: "center", padding: "9px 0" }}>
@@ -561,17 +560,17 @@ function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
                 <Upload size={13} /> Subir nuevo plano
               </button>
             )}
-            {jefeClicable && (
+            {cli.jefeAccion && (
               <button onClick={() => setModalJefe(true)} style={{ ...sBtnPlano("#c9a84c"), width: "100%", justifyContent: "center", padding: "9px 0", color: "#212121" }}>
                 <CheckCircle size={13} /> Revisar plano
               </button>
             )}
-            {costosClicable && (
+            {cli.costosAccion && (
               <button onClick={() => setModalCostos(true)} style={{ ...sBtnPlano("#c9a84c"), width: "100%", justifyContent: "center", padding: "9px 0", color: "#212121" }}>
                 <CheckCircle size={13} /> Liberar a producción
               </button>
             )}
-            {produccionClicable && (
+            {cli.produccionAccion && (
               <button onClick={() => setModalProduccion(true)} style={{ ...sBtnPlano("#212121"), width: "100%", justifyContent: "center", padding: "9px 0" }}>
                 <CheckCircle size={13} /> Marcar en producción
               </button>
@@ -579,18 +578,51 @@ function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
           </div>
         )}
       </div>
+      {modalLectura && (
+        <Portal>
+          <ModalLectura
+            nodo={modalLectura}
+            clave={clave}
+            plano={plano}
+            autInternas={autInternas}
+            autCliente={autCliente}
+            gerentesProyecto={gerentesProyecto}
+            onCerrar={() => setModalLectura(null)}
+          />
+        </Portal>
+      )}
     </>
   );
 }
 
+const ROLES_GESTION = ["GERENTE", "DUENO", "SUPERADMIN"];
+
+function calcularClicabilidad(rol, clave, autorizadoPorMi) {
+  const esGestion = ROLES_GESTION.includes(rol);
+  const jefeAccion = rol === "GERENTE" && clave.estatus === "REVISION_INTERNA" && !autorizadoPorMi;
+  const costosAccion = rol === "COSTOS" && clave.estatus === "AUTORIZADO";
+  const produccionAccion = rol === "PRODUCCION" && clave.estatus === "LIBERADO";
+  return {
+    esGestion,
+    jefeAccion,
+    jefeClicable: jefeAccion || rol === "DUENO" || rol === "SUPERADMIN",
+    clienteClicable: esGestion,
+    costosAccion,
+    costosClicable: costosAccion || esGestion,
+    produccionAccion,
+    produccionClicable: produccionAccion || esGestion,
+  };
+}
+
 /* ── Fila de clave rediseñada ── */
-function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSubir, onSubirPlano, onRefresh, onClienteUrl }) {
+function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSubir, onSubirPlano, onRefresh }) {
   const [accionando, setAccionando] = useState(false);
   const [toast, setToast] = useState(null);
   const [modalComentario, setModalComentario] = useState(null);
   const [modalJefe, setModalJefe] = useState(false);
   const [modalCostos, setModalCostos] = useState(false);
   const [modalProduccion, setModalProduccion] = useState(false);
+  const [modalLectura, setModalLectura] = useState(null);
 
   const plano = clave.planos?.[0] || null;
   const autInternas = plano?.autorizacionesInternas || [];
@@ -598,10 +630,12 @@ function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
   const autorizadoPorMi = autInternas.some((a) => a.gerente?.id === usuarioId && a.decision === "APROBADO");
 
   const pipeline = calcularPipeline(clave, plano);
+  const cli = calcularClicabilidad(rol, clave, autorizadoPorMi);
 
-  const jefeClicable = rol === "GERENTE" && pipeline.jefe.estado === "EN_PROCESO" && !autorizadoPorMi;
-  const costosClicable = rol === "COSTOS" && pipeline.costos.estado === "EN_PROCESO";
-  const produccionClicable = rol === "PRODUCCION" && pipeline.produccion.estado === "EN_PROCESO";
+  function onClickJefe()       { if (cli.jefeAccion) setModalJefe(true);             else if (cli.jefeClicable) setModalLectura("jefe"); }
+  function onClickCliente()    { if (cli.clienteClicable) setModalLectura("cliente"); }
+  function onClickCostos()     { if (cli.costosAccion) setModalCostos(true);          else if (cli.costosClicable) setModalLectura("costos"); }
+  function onClickProduccion() { if (cli.produccionAccion) setModalProduccion(true);  else if (cli.produccionClicable) setModalLectura("produccion"); }
 
   async function ejecutarAccion(url, method, body, mensajeExito) {
     setAccionando(true);
@@ -612,7 +646,6 @@ function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
         setToast({ tipo: "error", titulo: "Error al procesar", mensaje: data.error || "Error" });
         return false;
       }
-      if (data.clienteUrl) onClienteUrl(data.clienteUrl);
       setToast({ tipo: "exito", titulo: mensajeExito });
       setTimeout(() => { setToast(null); onRefresh(); }, 2000);
       return true;
@@ -655,6 +688,7 @@ function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
       {modalCostos && plano && (
         <Portal>
           <ModalAccionCostos
+            plano={plano}
             clave={clave}
             ejecutando={accionando}
             onCerrar={() => setModalCostos(false)}
@@ -662,12 +696,18 @@ function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
               const ok = await ejecutarAccion(`/api/planos/${plano.id}/liberar`, "POST", {}, "¡Plano liberado a producción!");
               if (ok) setModalCostos(false);
             }}
+            onRechazado={() => {
+              setModalCostos(false);
+              setToast({ tipo: "exito", titulo: "Plano rechazado por Costos. El diseñador deberá corregir." });
+              setTimeout(() => { setToast(null); onRefresh(); }, 2500);
+            }}
           />
         </Portal>
       )}
       {modalProduccion && (
         <Portal>
           <ModalAccionProduccion
+            plano={plano}
             clave={clave}
             ejecutando={accionando}
             onCerrar={() => setModalProduccion(false)}
@@ -735,22 +775,37 @@ function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
         <td style={{ ...sTd, paddingRight: 20 }}>
           <PipelineVisual
             pipeline={pipeline}
-            jefeClicable={jefeClicable}
-            costosClicable={costosClicable}
-            produccionClicable={produccionClicable}
-            onClickJefe={() => setModalJefe(true)}
-            onClickCostos={() => setModalCostos(true)}
-            onClickProduccion={() => setModalProduccion(true)}
+            jefeClicable={cli.jefeClicable}
+            clienteClicable={cli.clienteClicable}
+            costosClicable={cli.costosClicable}
+            produccionClicable={cli.produccionClicable}
+            onClickJefe={onClickJefe}
+            onClickCliente={onClickCliente}
+            onClickCostos={onClickCostos}
+            onClickProduccion={onClickProduccion}
             onVerComentario={setModalComentario}
           />
         </td>
       </tr>
+      {modalLectura && (
+        <Portal>
+          <ModalLectura
+            nodo={modalLectura}
+            clave={clave}
+            plano={plano}
+            autInternas={autInternas}
+            autCliente={autCliente}
+            gerentesProyecto={gerentesProyecto}
+            onCerrar={() => setModalLectura(null)}
+          />
+        </Portal>
+      )}
     </>
   );
 }
 
 /* ── Pipeline visual ── */
-function PipelineVisual({ pipeline, jefeClicable, costosClicable, produccionClicable, onClickJefe, onClickCostos, onClickProduccion, onVerComentario }) {
+function PipelineVisual({ pipeline, jefeClicable, clienteClicable, costosClicable, produccionClicable, onClickJefe, onClickCliente, onClickCostos, onClickProduccion, onVerComentario }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-start", padding: "8px 0" }}>
       <NodoPipeline
@@ -763,17 +818,18 @@ function PipelineVisual({ pipeline, jefeClicable, costosClicable, produccionClic
         onClick={onClickJefe}
         onVerComentario={pipeline.jefe.comentario ? () => onVerComentario({ texto: pipeline.jefe.comentario, autor: pipeline.jefe.nombre, fecha: null }) : null}
       />
-      <Conector completado={pipeline.jefe.estado === "COMPLETADO"} />
+      <Conector completado={pipeline.jefe.estado === "COMPLETADO"} destinoRechazado={pipeline.cliente.estado === "RECHAZADO"} />
       <NodoPipeline
         titulo="Cliente"
         estado={pipeline.cliente.estado}
         nombre={pipeline.cliente.nombre}
         fecha={pipeline.cliente.fecha}
         comentario={pipeline.cliente.comentario}
-        clicable={false}
+        clicable={clienteClicable}
+        onClick={onClickCliente}
         onVerComentario={pipeline.cliente.comentario ? () => onVerComentario({ texto: pipeline.cliente.comentario, autor: pipeline.cliente.nombre, fecha: null }) : null}
       />
-      <Conector completado={pipeline.cliente.estado === "COMPLETADO"} />
+      <Conector completado={pipeline.cliente.estado === "COMPLETADO"} destinoRechazado={pipeline.costos.estado === "RECHAZADO"} />
       <NodoPipeline
         titulo="Costos"
         estado={pipeline.costos.estado}
@@ -782,7 +838,7 @@ function PipelineVisual({ pipeline, jefeClicable, costosClicable, produccionClic
         clicable={costosClicable}
         onClick={onClickCostos}
       />
-      <Conector completado={pipeline.costos.estado === "COMPLETADO"} />
+      <Conector completado={pipeline.costos.estado === "COMPLETADO"} destinoRechazado={pipeline.produccion.estado === "RECHAZADO"} />
       <NodoPipeline
         titulo="Producción"
         estado={pipeline.produccion.estado}
@@ -795,12 +851,13 @@ function PipelineVisual({ pipeline, jefeClicable, costosClicable, produccionClic
   );
 }
 
-function Conector({ completado }) {
+function Conector({ completado, destinoRechazado }) {
+  const background = destinoRechazado ? "#ef4444" : completado ? "#10b981" : "#e5e7eb";
   return (
     <div style={{
       flex: 1,
       height: 2,
-      background: completado ? "#10b981" : "#e5e7eb",
+      background,
       marginTop: 17,
       minWidth: 16,
       flexShrink: 1,
@@ -925,7 +982,7 @@ function ModalAccionJefe({ plano, clave, autorizadoPorMi, onCerrar, onAutorizar,
 
   async function confirmarRechazo(e) {
     e.preventDefault();
-    if (comentarios.trim().length < 10) return setErr("Los comentarios deben tener al menos 10 caracteres.");
+    if (comentarios.trim().length < 20) return setErr("Los comentarios deben tener al menos 20 caracteres.");
     setEnviando(true);
     try {
       const res = await fetch(`/api/planos/${plano.id}/rechazar-interno`, {
@@ -958,13 +1015,28 @@ function ModalAccionJefe({ plano, clave, autorizadoPorMi, onCerrar, onAutorizar,
         {mostrando === "ver" && (
           <>
             <div style={{ padding: "16px 24px", flex: 1 }}>
-              <div style={{ border: "1px solid #e5e5e5", borderRadius: 8, overflow: "hidden", height: 420, background: "#f9fafb" }}>
+              <div style={{ border: "1px solid #e5e5e5", borderRadius: 8, overflow: "hidden", height: 400, background: "#f9fafb" }}>
                 <iframe src={plano.urlPdf} width="100%" height="100%" style={{ border: "none", display: "block" }} title="Plano PDF" />
               </div>
               <a href={plano.urlPdf} target="_blank" rel="noopener noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 10, fontSize: 12, color: "#c9a84c", textDecoration: "none" }}>
                 <ExternalLink size={12} /> Abrir en nueva pestaña
               </a>
+
+              {/* Checklist completado por diseñador */}
+              <div style={{ marginTop: 18, padding: "14px 16px", background: "#f9fafb", border: "1px solid #e5e5e5", borderRadius: 8 }}>
+                <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#212121" }}>
+                  Checklist completado por diseñador
+                </h4>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {ITEMS_CHECKLIST.map((texto, i) => (
+                    <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, color: "#374151", lineHeight: 1.45 }}>
+                      <Check size={14} style={{ color: "#10b981", flexShrink: 0, marginTop: 1 }} />
+                      <span>{texto}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
             <div style={{ padding: "16px 24px", borderTop: "1px solid #f0f0f0", display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button onClick={onCerrar}
@@ -974,11 +1046,11 @@ function ModalAccionJefe({ plano, clave, autorizadoPorMi, onCerrar, onAutorizar,
               {!autorizadoPorMi && (
                 <>
                   <button onClick={() => setMostrando("rechazar")}
-                    style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "9px 20px", color: "#991b1b", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    style={{ background: "#ef4444", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                     <X size={14} /> Rechazar
                   </button>
                   <button onClick={onAutorizar}
-                    style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "9px 20px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    style={{ background: "#10b981", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                     <CheckCircle size={14} /> Autorizar
                   </button>
                 </>
@@ -1001,7 +1073,7 @@ function ModalAccionJefe({ plano, clave, autorizadoPorMi, onCerrar, onAutorizar,
               className="input-base"
               rows={5}
               style={{ width: "100%", resize: "vertical", boxSizing: "border-box" }}
-              placeholder="Ej: Ajustar medidas de la puerta principal, corregir escala de la sección B... (mínimo 10 caracteres)"
+              placeholder="Describe qué debe corregir el diseñador... (mínimo 20 caracteres)"
               value={comentarios}
               onChange={(e) => { setComentarios(e.target.value); setErr(""); }}
               autoFocus
@@ -1024,17 +1096,159 @@ function ModalAccionJefe({ plano, clave, autorizadoPorMi, onCerrar, onAutorizar,
   );
 }
 
-function ModalAccionCostos({ clave, ejecutando, onCerrar, onConfirmado }) {
+function ModalAccionCostos({ plano, clave, ejecutando, onCerrar, onConfirmado, onRechazado }) {
+  const [mostrando, setMostrando] = useState("ver");
+  const [comentarios, setComentarios] = useState("");
+  const [err, setErr] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  async function confirmarRechazo(e) {
+    e.preventDefault();
+    if (comentarios.trim().length < 20) return setErr("Los comentarios deben tener al menos 20 caracteres.");
+    setEnviando(true);
+    try {
+      const res = await fetch(`/api/planos/${plano.id}/rechazar-costos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comentarios: comentarios.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setErr(data.error || "Error al rechazar."); return; }
+      onRechazado();
+    } catch {
+      setErr("Error de conexión.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCerrar()}>
-      <div style={{ background: "#ffffff", borderRadius: 16, width: "90%", maxWidth: 420, padding: "28px 28px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#212121" }}>Liberar a producción</h2>
-          <button onClick={onCerrar} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer" }}><X size={20} /></button>
+      <div style={{ background: "#ffffff", borderRadius: 16, width: "92%", maxWidth: 760, maxHeight: "92vh", overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid #f0f0f0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#212121" }}>
+            {mostrando === "rechazar" ? "Rechazar plano" : "Liberación a producción"} — {clave.codigo}
+          </h2>
+          <button onClick={onCerrar} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", padding: 4 }}>
+            <X size={20} />
+          </button>
         </div>
-        <p style={{ margin: "0 0 20px", fontSize: 14, color: "#6b7280", lineHeight: 1.6 }}>
-          ¿Confirmas que el análisis de costos de la clave <strong style={{ color: "#212121" }}>{clave.codigo}</strong> está completo y el plano puede liberarse a producción?
-        </p>
+
+        {mostrando === "ver" && (
+          <>
+            <div style={{ padding: "16px 24px", flex: 1 }}>
+              {plano && (
+                <div style={{ border: "1px solid #e5e5e5", borderRadius: 8, overflow: "hidden", height: 350, background: "#f9fafb" }}>
+                  <iframe src={plano.autorizacionCliente?.urlPdfFirmado || plano.urlPdf} width="100%" height="100%" style={{ border: "none", display: "block" }} title="Plano PDF" />
+                </div>
+              )}
+
+              {plano?.autorizacionCliente?.urlPdfFirmado && (
+                <a
+                  href={plano.autorizacionCliente.urlPdfFirmado}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12, fontSize: 13, fontWeight: 600, color: "#c9a84c", textDecoration: "none", padding: "8px 14px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8 }}
+                >
+                  <FileText size={14} /> Ver PDF firmado por cliente
+                </a>
+              )}
+
+              {plano?.comentariosCostos && (
+                <div style={{ marginTop: 16, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                    Notas del diseñador
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, color: "#78350f", lineHeight: 1.5 }}>
+                    {plano.comentariosCostos}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div style={{ padding: "16px 24px", borderTop: "1px solid #f0f0f0", display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button onClick={onCerrar}
+                style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
+                Cerrar
+              </button>
+              <button onClick={() => setMostrando("rechazar")}
+                style={{ background: "#ef4444", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <X size={14} /> Rechazar
+              </button>
+              <button onClick={onConfirmado} disabled={ejecutando}
+                style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "9px 20px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: ejecutando ? "not-allowed" : "pointer", opacity: ejecutando ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}>
+                {ejecutando ? "Liberando…" : <><CheckCircle size={14} /> Liberar a producción</>}
+              </button>
+            </div>
+          </>
+        )}
+
+        {mostrando === "rechazar" && (
+          <form onSubmit={confirmarRechazo} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+            <p style={{ margin: 0, fontSize: 13, color: "#6b7280" }}>
+              Describe los motivos del rechazo para que el diseñador pueda corregir.
+            </p>
+            <textarea
+              className="input-base"
+              rows={5}
+              style={{ width: "100%", resize: "vertical", boxSizing: "border-box" }}
+              placeholder="Describe los problemas detectados desde Costos... (mínimo 20 caracteres)"
+              value={comentarios}
+              onChange={(e) => { setComentarios(e.target.value); setErr(""); }}
+              autoFocus
+            />
+            {err && <p style={{ margin: 0, color: "#ef4444", fontSize: 13 }}>{err}</p>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setMostrando("ver")}
+                style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
+                Volver
+              </button>
+              <button type="submit" disabled={enviando}
+                style={{ background: "#ef4444", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 600, fontSize: 13, cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? 0.7 : 1 }}>
+                {enviando ? "Rechazando…" : "Confirmar rechazo"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ModalAccionProduccion({ plano, clave, ejecutando, onCerrar, onConfirmado }) {
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCerrar()}>
+      <div style={{ background: "#ffffff", borderRadius: 16, width: "92%", maxWidth: 520, padding: 28, maxHeight: "90vh", overflowY: "auto", position: "relative" }}>
+        <button onClick={onCerrar} style={{ position: "absolute", top: 16, right: 16, background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", padding: 4 }}>
+          <X size={20} />
+        </button>
+        <h2 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 600, color: "#212121" }}>
+          Marcar en producción — {clave.codigo}
+        </h2>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Clave</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#212121" }}>{clave.codigo}</div>
+          {clave.descripcion && (
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>{clave.descripcion}</p>
+          )}
+        </div>
+
+        {plano && (
+          <div style={{ marginBottom: 18, padding: "12px 14px", background: "#f9fafb", border: "1px solid #e5e5e5", borderRadius: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Plano</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#212121" }}>Versión {plano.version}</span>
+              {plano.subidoPor?.nombre && (
+                <span style={{ fontSize: 12, color: "#6b7280" }}>· Subido por {plano.subidoPor.nombre}</span>
+              )}
+            </div>
+            <a href={plano.urlPdf} target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: 12, color: "#c9a84c", textDecoration: "none", padding: "5px 10px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6 }}>
+              <ExternalLink size={12} /> Ver PDF
+            </a>
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button onClick={onCerrar}
             style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
@@ -1042,7 +1256,7 @@ function ModalAccionCostos({ clave, ejecutando, onCerrar, onConfirmado }) {
           </button>
           <button onClick={onConfirmado} disabled={ejecutando}
             style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "9px 20px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: ejecutando ? "not-allowed" : "pointer", opacity: ejecutando ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}>
-            {ejecutando ? "Liberando…" : <><CheckCircle size={14} /> Liberar a producción</>}
+            {ejecutando ? "Procesando…" : <><CheckCircle size={14} /> Confirmar en producción</>}
           </button>
         </div>
       </div>
@@ -1050,26 +1264,129 @@ function ModalAccionCostos({ clave, ejecutando, onCerrar, onConfirmado }) {
   );
 }
 
-function ModalAccionProduccion({ clave, ejecutando, onCerrar, onConfirmado }) {
+/* ── Modal de lectura unificado ── */
+function LineaTexto({ children }) {
+  return <p style={{ margin: "0 0 12px", fontSize: 14, color: "#212121", lineHeight: 1.6 }}>{children}</p>;
+}
+
+function CajaTextoLectura({ label, children }) {
+  return (
+    <div style={{ marginTop: 8, background: "#f9fafb", border: "1px solid #e5e5e5", borderRadius: 8, padding: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{label}</div>
+      <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.5, fontStyle: "italic" }}>"{children}"</p>
+    </div>
+  );
+}
+
+function CajaNotasCostos({ children }) {
+  return (
+    <div style={{ marginBottom: 14, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Notas del diseñador</div>
+      <p style={{ margin: 0, fontSize: 13, color: "#78350f", lineHeight: 1.5 }}>{children}</p>
+    </div>
+  );
+}
+
+function ModalLectura({ nodo, clave, plano, autInternas, autCliente, gerentesProyecto, onCerrar }) {
+  const fmt = (f) => f ? new Date(f).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" }) : "—";
+
+  const TITULOS = {
+    jefe: "Estado — Jefe de área",
+    cliente: "Respuesta del cliente",
+    costos: "Estado — Costos",
+    produccion: "Estado — Producción",
+  };
+
+  function renderContenido() {
+    if (nodo === "jefe") {
+      const aprobada = (autInternas || []).find((a) => a.decision === "APROBADO");
+      const rechazada = (autInternas || []).find((a) => a.decision === "RECHAZADO");
+      const gerenteAsignado = gerentesProyecto?.[0];
+      if (rechazada) {
+        return (
+          <>
+            <LineaTexto>Rechazado por <strong>{rechazada.gerente?.nombre || "—"}</strong> el {fmt(rechazada.createdAt)}</LineaTexto>
+            {rechazada.comentarios && <CajaTextoLectura label="Motivo">{rechazada.comentarios}</CajaTextoLectura>}
+          </>
+        );
+      }
+      if (aprobada) {
+        return <LineaTexto>Autorizado por <strong>{aprobada.gerente?.nombre || "—"}</strong> el {fmt(aprobada.createdAt)}</LineaTexto>;
+      }
+      return <LineaTexto>Pendiente de autorización por <strong>{gerenteAsignado?.nombre || "el gerente asignado"}</strong></LineaTexto>;
+    }
+
+    if (nodo === "cliente") {
+      if (!autCliente) return <LineaTexto>Pendiente de respuesta del cliente</LineaTexto>;
+      if (autCliente.decision === "APROBADO") {
+        return (
+          <>
+            <LineaTexto>Aprobado por: <strong>{autCliente.firmadoPor}</strong></LineaTexto>
+            <LineaTexto>Fecha: {fmt(autCliente.createdAt)}</LineaTexto>
+            {autCliente.urlPdfFirmado && (
+              <a
+                href={autCliente.urlPdfFirmado}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  background: "#212121",
+                  color: "#c9a84c",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  marginTop: 12,
+                }}
+              >
+                <FileText size={14} /> Ver PDF firmado por cliente
+              </a>
+            )}
+          </>
+        );
+      }
+      return (
+        <>
+          <LineaTexto>Rechazado el {fmt(autCliente.createdAt)}</LineaTexto>
+          {autCliente.comentarios && <CajaTextoLectura label="Comentarios del cliente">{autCliente.comentarios}</CajaTextoLectura>}
+        </>
+      );
+    }
+
+    if (nodo === "costos") {
+      const liberado = clave.estatus === "LIBERADO" || clave.estatus === "EN_PRODUCCION";
+      return (
+        <>
+          {plano?.comentariosCostos && <CajaNotasCostos>{plano.comentariosCostos}</CajaNotasCostos>}
+          {liberado
+            ? <LineaTexto>Liberado a producción</LineaTexto>
+            : <LineaTexto>Pendiente de liberación a producción</LineaTexto>}
+        </>
+      );
+    }
+
+    if (nodo === "produccion") {
+      if (clave.estatus === "EN_PRODUCCION") {
+        return <LineaTexto>En producción desde {fmt(clave.updatedAt)}</LineaTexto>;
+      }
+      return <LineaTexto>Pendiente</LineaTexto>;
+    }
+    return null;
+  }
+
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCerrar()}>
-      <div style={{ background: "#ffffff", borderRadius: 16, width: "90%", maxWidth: 420, padding: "28px 28px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#212121" }}>Marcar en producción</h2>
-          <button onClick={onCerrar} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer" }}><X size={20} /></button>
-        </div>
-        <p style={{ margin: "0 0 20px", fontSize: 14, color: "#6b7280", lineHeight: 1.6 }}>
-          ¿Confirmas que la clave <strong style={{ color: "#212121" }}>{clave.codigo}</strong> ha entrado en proceso de producción?
-        </p>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button onClick={onCerrar}
-            style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
-            Cancelar
-          </button>
-          <button onClick={onConfirmado} disabled={ejecutando}
-            style={{ background: "#212121", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 600, fontSize: 13, cursor: ejecutando ? "not-allowed" : "pointer", opacity: ejecutando ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}>
-            {ejecutando ? "Procesando…" : <><CheckCircle size={14} /> Confirmar producción</>}
-          </button>
+      <div style={{ background: "#ffffff", borderRadius: 16, padding: 28, maxWidth: 560, width: "90%", maxHeight: "90vh", overflowY: "auto", position: "relative" }}>
+        <button onClick={onCerrar} style={{ position: "absolute", top: 16, right: 16, background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", padding: 4 }}>
+          <X size={20} />
+        </button>
+        <h2 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 600, color: "#212121" }}>{TITULOS[nodo]}</h2>
+        {renderContenido()}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+          <button onClick={onCerrar} className="btn-secundario">Cerrar</button>
         </div>
       </div>
     </div>
@@ -1127,20 +1444,31 @@ function EstatusBadge({ estatus }) {
   );
 }
 
-function PinDisplay({ pin, onCambiar }) {
+function PinDisplay({ pin, onCambiar, esMobil }) {
   const [copiado, setCopiado] = useState(false);
   function copiar() {
     navigator.clipboard.writeText(pin).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 1800); });
   }
   return (
-    <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "14px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, minWidth: 170 }}>
-      <span style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.12em" }}>PIN de acceso</span>
-      <span style={{ fontSize: 28, fontWeight: 800, letterSpacing: 8, color: "#c9a84c", fontVariantNumeric: "tabular-nums" }}>{pin}</span>
-      <div style={{ display: "flex", gap: 6 }}>
-        <button onClick={copiar} style={{ display: "flex", alignItems: "center", gap: 4, background: "#c9a84c", border: "none", borderRadius: 6, padding: "5px 11px", color: "#212121", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+    <div style={{
+      background: "#f9f9f9",
+      border: "1px solid #e5e5e5",
+      borderRadius: 10,
+      padding: "10px 14px",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: esMobil ? "flex-start" : "center",
+      gap: 6,
+      width: esMobil ? "100%" : "auto",
+      minWidth: esMobil ? 0 : 160,
+    }}>
+      <span style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.1em" }}>PIN de acceso</span>
+      <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: "0.15em", color: "#212121", fontVariantNumeric: "tabular-nums" }}>{pin}</span>
+      <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+        <button onClick={copiar} style={{ display: "flex", alignItems: "center", gap: 4, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 6, padding: "6px 10px", color: "#212121", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
           <Copy size={12} /> {copiado ? "¡Copiado!" : "Copiar"}
         </button>
-        <button onClick={onCambiar} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "1px solid #fde68a", borderRadius: 6, padding: "5px 11px", color: "#92400e", fontSize: 12, cursor: "pointer" }}>
+        <button onClick={onCambiar} style={{ display: "flex", alignItems: "center", gap: 4, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 6, padding: "6px 10px", color: "#6b7280", fontSize: 12, cursor: "pointer" }}>
           <RefreshCw size={12} /> Cambiar
         </button>
       </div>
@@ -1164,16 +1492,32 @@ function GrupoUsuarios({ titulo, usuarios }) {
   );
 }
 
-function CopiarLinkCliente({ pin }) {
+function CopiarLinkCliente({ pin, habilitado }) {
   const [copiado, setCopiado] = useState(false);
   function copiar() {
-    const url = `${getAppUrl()}/cliente/${pin}`;
+    if (!habilitado) return;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "");
+    const url = `${appUrl}/cliente/${pin}`;
     navigator.clipboard.writeText(url).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 2000); });
   }
   return (
     <div>
       <p style={{ margin: "0 0 5px", fontSize: 10, fontWeight: 700, color: "#aaaaaa", textTransform: "uppercase", letterSpacing: "0.08em" }}>Link del cliente</p>
-      <button onClick={copiar} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: copiado ? "#dcfce7" : "#f5f5f5", border: `1px solid ${copiado ? "#86efac" : "#e5e5e5"}`, borderRadius: 8, padding: "5px 12px", color: copiado ? "#166534" : "#555555", fontSize: 12, cursor: "pointer", transition: "all 0.2s" }}>
+      <button
+        onClick={copiar}
+        disabled={!habilitado}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          background: copiado ? "#dcfce7" : "#f5f5f5",
+          border: `1px solid ${copiado ? "#86efac" : "#e5e5e5"}`,
+          borderRadius: 8, padding: "5px 12px",
+          color: !habilitado ? "#9ca3af" : copiado ? "#166534" : "#555555",
+          fontSize: 12,
+          cursor: habilitado ? "pointer" : "not-allowed",
+          opacity: habilitado ? 1 : 0.4,
+          transition: "all 0.2s",
+        }}
+      >
         {copiado ? <><CheckCircle size={12} /> ¡Copiado!</> : <><Link size={12} /> Copiar link del cliente</>}
       </button>
     </div>
@@ -1218,7 +1562,7 @@ function ModalCambiarPin({ proyectoId, pinActual, onCerrar, onGuardado }) {
 
 function ModalEditarProyecto({ proyecto, onCerrar, onGuardado }) {
   const gerenteActual = proyecto.gerentes?.[0]?.usuario?.id || "";
-  const [form, setForm] = useState({ nombre: proyecto.nombre, clienteNombre: proyecto.clienteNombre, estatus: proyecto.estatus, gerenteId: gerenteActual });
+  const [form, setForm] = useState({ nombre: proyecto.nombre, clienteNombre: proyecto.clienteNombre, clienteContacto: proyecto.clienteContacto || "", estatus: proyecto.estatus, gerenteId: gerenteActual });
   const [gerentes, setGerentes] = useState([]);
   const [err, setErr] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -1242,7 +1586,7 @@ function ModalEditarProyecto({ proyecto, onCerrar, onGuardado }) {
       const res = await fetch(`/api/proyectos/${proyecto.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: form.nombre.trim(), clienteNombre: form.clienteNombre.trim(), estatus: form.estatus, gerentesIds }),
+        body: JSON.stringify({ nombre: form.nombre.trim(), clienteNombre: form.clienteNombre.trim(), clienteContacto: form.clienteContacto.trim(), estatus: form.estatus, gerentesIds }),
       });
       const data = await res.json();
       if (!res.ok) return setErr(data.error || "Error al actualizar.");
@@ -1258,6 +1602,9 @@ function ModalEditarProyecto({ proyecto, onCerrar, onGuardado }) {
         </Campo>
         <Campo label="Nombre del cliente">
           <input className="input-base" style={{ width: "100%" }} value={form.clienteNombre} onChange={(e) => cambiar("clienteNombre", e.target.value)} />
+        </Campo>
+        <Campo label="Nombre del contacto que firmará">
+          <input className="input-base" style={{ width: "100%" }} placeholder="Ej. Juan Pérez García" value={form.clienteContacto} onChange={(e) => cambiar("clienteContacto", e.target.value)} />
         </Campo>
         <Campo label="Estatus del proyecto">
           <select className="input-base" style={{ width: "100%" }} value={form.estatus} onChange={(e) => cambiar("estatus", e.target.value)}>
@@ -1307,8 +1654,30 @@ function ModalCrearClave({ proyectoId, onCerrar, onGuardado }) {
             placeholder="Ej. COCINA-01" value={codigo} onChange={(e) => { setCodigo(e.target.value); setErr(""); }} autoFocus />
         </Campo>
         <Campo label="Descripción">
-          <input className="input-base" style={{ width: "100%" }}
-            placeholder="Ej. Cocina principal torre B" value={descripcion} onChange={(e) => { setDescripcion(e.target.value); setErr(""); }} />
+          <textarea
+            placeholder="Ej. Cocina principal torre B"
+            value={descripcion}
+            onChange={(e) => { setDescripcion(e.target.value); setErr(""); }}
+            style={{
+              width: "100%",
+              minHeight: 80,
+              maxHeight: 200,
+              resize: "vertical",
+              padding: "11px 14px",
+              borderRadius: 8,
+              border: "1.5px solid #e0e0e0",
+              fontSize: 14,
+              color: "#212121",
+              background: "#fafafa",
+              outline: "none",
+              fontFamily: "inherit",
+              lineHeight: 1.5,
+              boxSizing: "border-box",
+              transition: "border-color 0.15s",
+            }}
+            onFocus={(e) => e.target.style.borderColor = "#c9a84c"}
+            onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+          />
         </Campo>
         {err && <p style={{ margin: 0, color: "#ef4444", fontSize: 13 }}>{err}</p>}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -1320,21 +1689,47 @@ function ModalCrearClave({ proyectoId, onCerrar, onGuardado }) {
   );
 }
 
+const ITEMS_CHECKLIST = [
+  "Confirmo que se siguieron los procesos establecidos por la empresa.",
+  "Confirmo que se revisaron y validaron los instructivos de trabajo aplicables.",
+  "Confirmo que se verificaron los planos del cliente, presupuesto y explosiones/despieces correspondientes.",
+  "Confirmo que se colocaron los comentarios y observaciones necesarios para el área de costos.",
+  "Confirmo que se verificaron electrodomésticos, cubierta, iluminación LED y demás elementos complementarios.",
+  "Confirmo que los planos incluyen correctamente los elementos físicos de obra civil.",
+];
+
 function ModalSubirPlano({ claveId, onCerrar, onGuardado }) {
+  const [marcados, setMarcados] = useState(Array(ITEMS_CHECKLIST.length).fill(false));
   const [archivo, setArchivo] = useState(null);
+  const [comentarios, setComentarios] = useState("");
   const [err, setErr] = useState("");
   const [subiendo, setSubiendo] = useState(false);
 
+  const completados = marcados.filter(Boolean).length;
+  const todosMarcados = completados === ITEMS_CHECKLIST.length;
+  const comentariosOk = comentarios.trim().length >= 10;
+  const archivoOk = !!archivo;
+  const puedeSubir = todosMarcados && comentariosOk && archivoOk;
+  const progresoPct = (completados / ITEMS_CHECKLIST.length) * 100;
+
+  function toggleItem(idx) {
+    setMarcados((prev) => prev.map((v, i) => (i === idx ? !v : v)));
+    setErr("");
+  }
+
   async function subir(e) {
     e.preventDefault();
-    if (!archivo) return setErr("Selecciona un archivo PDF.");
+    if (!archivoOk) return setErr("Selecciona un archivo PDF.");
     if (archivo.type !== "application/pdf") return setErr("Solo se permiten archivos PDF.");
     if (archivo.size > 50 * 1024 * 1024) return setErr("El archivo no puede superar 50 MB.");
+    if (!todosMarcados) return setErr("Debes marcar todos los puntos del checklist.");
+    if (!comentariosOk) return setErr("Los comentarios para Costos deben tener al menos 10 caracteres.");
     setSubiendo(true); setErr("");
     try {
       const fd = new FormData();
       fd.append("file", archivo);
       fd.append("claveId", claveId);
+      fd.append("comentariosCostos", comentarios.trim());
       const res = await fetch("/api/planos", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) return setErr(data.error || "Error al subir el plano.");
@@ -1344,22 +1739,125 @@ function ModalSubirPlano({ claveId, onCerrar, onGuardado }) {
   }
 
   return (
-    <Modal titulo="Subir plano (PDF)" onCerrar={onCerrar}>
-      <form onSubmit={subir}>
-        <div
-          style={{ border: "2px dashed #e5e5e5", borderRadius: 8, padding: 32, textAlign: "center", marginBottom: 14, cursor: "pointer", background: archivo ? "#f0fdf4" : "#fafafa" }}
-          onClick={() => document.getElementById("input-pdf-modal").click()}
-        >
-          <Upload size={28} style={{ color: "#c9a84c", marginBottom: 8 }} />
-          {archivo
-            ? <p style={{ margin: 0, color: "#166534", fontSize: 13, fontWeight: 500 }}>{archivo.name}</p>
-            : <p style={{ margin: 0, color: "#888888", fontSize: 13 }}>Haz clic para seleccionar o arrastra el PDF<br /><span style={{ fontSize: 11, opacity: 0.7 }}>Máximo 50 MB</span></p>}
-        </div>
-        <input id="input-pdf-modal" type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { setArchivo(e.target.files[0] || null); setErr(""); }} />
-        {err && <p style={{ margin: "0 0 10px", color: "#ef4444", fontSize: 13 }}>{err}</p>}
+    <Modal titulo="Subir plano" onCerrar={onCerrar}>
+      <form onSubmit={subir} style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+
+        {/* Sección 1 — Checklist */}
+        <section>
+          <h3 style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 600, color: "#212121" }}>Checklist de revisión técnica</h3>
+          <p style={{ margin: "0 0 12px", fontSize: 12, color: "#888888" }}>Debes confirmar todos los puntos antes de continuar</p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {ITEMS_CHECKLIST.map((texto, i) => (
+              <label
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  padding: "10px 12px",
+                  background: marcados[i] ? "rgba(201,168,76,0.05)" : "#ffffff",
+                  borderLeft: marcados[i] ? "3px solid #c9a84c" : "3px solid #e5e5e5",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  transition: "background 0.15s, border-color 0.15s",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={marcados[i]}
+                  onChange={() => toggleItem(i)}
+                  style={{ accentColor: "#c9a84c", marginTop: 2, flexShrink: 0, width: 16, height: 16, cursor: "pointer" }}
+                />
+                <span style={{ fontSize: 13, color: "#212121", lineHeight: 1.45 }}>{texto}</span>
+              </label>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#888888", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {completados}/{ITEMS_CHECKLIST.length} completados
+              </span>
+            </div>
+            <div style={{ height: 4, background: "#f0f0f0", borderRadius: 99, overflow: "hidden" }}>
+              <div style={{ width: `${progresoPct}%`, height: "100%", background: "#c9a84c", transition: "width 0.25s" }} />
+            </div>
+          </div>
+        </section>
+
+        {/* Sección 2 — Archivo */}
+        <section>
+          <h3 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600, color: "#212121" }}>Archivo PDF</h3>
+          <div
+            style={{ border: "2px dashed #e5e5e5", borderRadius: 8, padding: 24, textAlign: "center", cursor: "pointer", background: archivo ? "#f0fdf4" : "#fafafa" }}
+            onClick={() => document.getElementById("input-pdf-modal").click()}
+          >
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}>
+              <Upload size={26} style={{ color: "#c9a84c" }} />
+            </div>
+            {archivo
+              ? <p style={{ margin: 0, color: "#166534", fontSize: 13, fontWeight: 500 }}>{archivo.name}</p>
+              : <p style={{ margin: 0, color: "#888888", fontSize: 13 }}>Haz clic para seleccionar el PDF<br /><span style={{ fontSize: 11, opacity: 0.7 }}>Máximo 50 MB</span></p>}
+          </div>
+          <input id="input-pdf-modal" type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { setArchivo(e.target.files[0] || null); setErr(""); }} />
+        </section>
+
+        {/* Sección 3 — Comentarios para Costos */}
+        <section>
+          <h3 style={{ margin: "0 0 2px", fontSize: 14, fontWeight: 600, color: "#212121" }}>Comentarios para el área de Costos</h3>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#888888" }}>Solo el área de Costos puede ver estos comentarios</p>
+          <textarea
+            rows={4}
+            value={comentarios}
+            onChange={(e) => { setComentarios(e.target.value); setErr(""); }}
+            placeholder="Describe aspectos importantes que Costos debe revisar..."
+            style={{
+              width: "100%",
+              padding: 12,
+              border: "1.5px solid #e0e0e0",
+              borderRadius: 8,
+              fontSize: 14,
+              color: "#212121",
+              outline: "none",
+              resize: "vertical",
+              boxSizing: "border-box",
+              fontFamily: "inherit",
+              transition: "border-color 0.15s",
+            }}
+            onFocus={(e) => e.target.style.borderColor = "#c9a84c"}
+            onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+          />
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: comentariosOk ? "#10b981" : "#888888" }}>
+            {comentarios.trim().length} caracteres {comentariosOk ? "✓" : "(mínimo 10)"}
+          </p>
+        </section>
+
+        {err && <p style={{ margin: 0, color: "#ef4444", fontSize: 13 }}>{err}</p>}
+
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button type="button" className="btn-secundario" onClick={onCerrar} disabled={subiendo}>Cancelar</button>
-          <button type="submit" className="btn-primario" disabled={subiendo || !archivo}>{subiendo ? "Subiendo…" : "Subir plano"}</button>
+          <button
+            type="submit"
+            disabled={subiendo || !puedeSubir}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "10px 22px",
+              background: "#c9a84c",
+              color: "#212121",
+              fontWeight: 600,
+              fontSize: 14,
+              borderRadius: 8,
+              border: "none",
+              cursor: (subiendo || !puedeSubir) ? "not-allowed" : "pointer",
+              opacity: (subiendo || !puedeSubir) ? 0.5 : 1,
+              transition: "opacity 0.15s",
+            }}
+          >
+            {subiendo ? "Subiendo…" : "Subir plano"}
+          </button>
         </div>
       </form>
     </Modal>

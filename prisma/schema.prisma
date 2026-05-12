@@ -27,13 +27,14 @@ model Usuario {
 }
 
 model Proyecto {
-  id            Int             @id @default(autoincrement())
-  nombre        String
-  clienteNombre String
-  pinAcceso     String          @unique
-  estatus       EstatusProyecto @default(ACTIVO)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id              Int             @id @default(autoincrement())
+  nombre          String
+  clienteNombre   String
+  clienteContacto String?
+  pinAcceso       String          @unique
+  estatus         EstatusProyecto @default(ACTIVO)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   gerentes ProyectoGerente[]
   claves   Clave[]
@@ -78,9 +79,10 @@ model Plano {
   id          Int      @id @default(autoincrement())
   claveId     Int
   urlPdf      String   @db.Text
-  version     Int      @default(1)
-  subidoPorId Int
-  createdAt   DateTime @default(now())
+  version           Int      @default(1)
+  subidoPorId       Int
+  comentariosCostos String?  @db.Text
+  createdAt         DateTime @default(now())
 
   clave                  Clave                 @relation(fields: [claveId], references: [id], onDelete: Cascade)
   subidoPor              Usuario               @relation(fields: [subidoPorId], references: [id])
@@ -108,14 +110,15 @@ model AutorizacionInterna {
 }
 
 model AutorizacionCliente {
-  id          Int      @id @default(autoincrement())
-  planoId     Int      @unique
-  decision    Decision
-  comentarios String?
-  firmadoPor  String
-  firmaBase64 String?  @db.Text
-  ipCliente   String?
-  createdAt   DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  planoId        Int      @unique
+  decision       Decision
+  comentarios    String?
+  firmadoPor     String
+  firmaBase64    String?  @db.Text
+  urlPdfFirmado  String?  @db.Text
+  ipCliente      String?
+  createdAt      DateTime @default(now())
 
   plano Plano @relation(fields: [planoId], references: [id], onDelete: Cascade)
 }

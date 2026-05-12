@@ -372,11 +372,16 @@ export default function ProyectosPage() {
                         {totalesTabla.claves || "—"}
                       </span>
                     </td>
-                    {(["pendJefe", "pendCliente", "costos", "produccion"]).map((col) => (
+                    {(["pendJefe", "pendCliente", "costos"]).map((col) => (
                       <td key={col} style={{ ...sTotalesCell, textAlign: "center" }}>
                         <CeldaSemTotales mapa={totalesSemaforo[col]} horizontal />
                       </td>
                     ))}
+                    <td style={{ ...sTotalesCell, textAlign: "center" }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: totalesTabla.produccion > 0 ? "#10b981" : "#d1d5db" }}>
+                        {totalesTabla.produccion || "—"}
+                      </span>
+                    </td>
                     <td style={sTotalesCell} />
                   </tr>
                 </thead>
@@ -553,7 +558,10 @@ function FilaProyecto({ proyecto, onClick }) {
         <CeldaSemTotales mapa={mapaCol("AUTORIZADO")} />
       </td>
       <td style={{ ...sTd, textAlign: "center" }}>
-        <CeldaSemTotales mapa={mapaCol("LIBERADO", "EN_PRODUCCION")} />
+        {(() => {
+          const n = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
+          return <span style={{ fontSize: 13, fontWeight: 700, color: n > 0 ? "#10b981" : "#d1d5db" }}>{n || "—"}</span>;
+        })()}
       </td>
       <td style={{ ...sTd, minWidth: 150 }}>
         <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>{porcentaje}% Completado</div>
@@ -580,11 +588,12 @@ function CardProyecto({ proyecto, onClick }) {
     return agruparPorColor(claves.filter((c) => estatuses.includes(c.estatus)));
   }
 
+  const totalProduccion = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
   const INDICADORES = [
     { label: "PEND. JEFE",    mapa: mapaCol("REVISION_INTERNA") },
     { label: "PEND. CLIENTE", mapa: mapaCol("ENVIADO") },
     { label: "COSTOS",        mapa: mapaCol("AUTORIZADO") },
-    { label: "PRODUCCIÓN",    mapa: mapaCol("LIBERADO", "EN_PRODUCCION") },
+    { label: "PRODUCCIÓN",    tipo: "numero", valor: totalProduccion },
   ];
 
   return (
@@ -629,12 +638,16 @@ function CardProyecto({ proyecto, onClick }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        {INDICADORES.map(({ label, mapa }) => (
+        {INDICADORES.map(({ label, mapa, tipo, valor }) => (
           <div key={label} style={{ background: "#f9fafb", borderRadius: 8, padding: "8px 10px" }}>
             <div style={{ fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
               {label}
             </div>
-            <CeldaSemTotales mapa={mapa} />
+            {tipo === "numero" ? (
+              <span style={{ fontSize: 13, fontWeight: 700, color: valor > 0 ? "#10b981" : "#d1d5db" }}>{valor || "—"}</span>
+            ) : (
+              <CeldaSemTotales mapa={mapa} />
+            )}
           </div>
         ))}
       </div>
@@ -643,7 +656,7 @@ function CardProyecto({ proyecto, onClick }) {
 }
 
 function ModalCrearProyecto({ onCerrar, onCreado, gerentes }) {
-  const [form, setForm] = useState({ nombre: "", clienteNombre: "", pinAcceso: generarPin(), gerenteId: "" });
+  const [form, setForm] = useState({ nombre: "", clienteNombre: "", clienteContacto: "", pinAcceso: generarPin(), gerenteId: "" });
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [pinCopiado, setPinCopiado] = useState(false);
@@ -666,7 +679,7 @@ function ModalCrearProyecto({ onCerrar, onCreado, gerentes }) {
       const res = await fetch("/api/proyectos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: form.nombre, clienteNombre: form.clienteNombre, pinAcceso: form.pinAcceso, gerentesIds }),
+        body: JSON.stringify({ nombre: form.nombre, clienteNombre: form.clienteNombre, clienteContacto: form.clienteContacto, pinAcceso: form.pinAcceso, gerentesIds }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al crear proyecto");
@@ -704,6 +717,11 @@ function ModalCrearProyecto({ onCerrar, onCreado, gerentes }) {
           <div>
             <label style={sLabel}>Cliente (desarrolladora) <span style={{ color: "#ef4444" }}>*</span></label>
             <input className="input-base" placeholder="Ej: Grupo Inmobiliario ZAG" value={form.clienteNombre} onChange={(e) => setForm({ ...form, clienteNombre: e.target.value })} disabled={cargando} />
+          </div>
+
+          <div>
+            <label style={sLabel}>Nombre del contacto que firmará</label>
+            <input className="input-base" placeholder="Ej. Juan Pérez García" value={form.clienteContacto} onChange={(e) => setForm({ ...form, clienteContacto: e.target.value })} disabled={cargando} />
           </div>
 
           <div>
