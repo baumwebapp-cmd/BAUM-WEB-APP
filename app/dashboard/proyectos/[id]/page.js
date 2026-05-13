@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   ArrowLeft, Pencil, RefreshCw, Plus, Upload, CheckCircle, X,
-  Copy, ExternalLink, FileText, Clock, User, AlertTriangle, Link,
+  ExternalLink, FileText, Clock, User, AlertTriangle, Link,
   Settings, Check, Minus,
 } from "lucide-react";
 import { urlPdfPlano } from "@/lib/urlPdf";
@@ -229,34 +229,57 @@ export default function ProyectoDetallePage() {
       </div>
 
       {/* Header del proyecto */}
-      <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, marginBottom: 20, overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ marginBottom: 8 }}>
-              <h1 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#212121" }}>{proyecto.nombre}</h1>
-            </div>
-            <p style={{ margin: "0 0 4px", fontSize: 13, color: "#555555" }}>
-              <span style={{ color: "#999999" }}>Cliente: </span>
-              <strong style={{ color: "#212121", fontWeight: 600 }}>{proyecto.clienteNombre}</strong>
-            </p>
-            <p style={{ margin: 0, fontSize: 11, color: "#aaaaaa" }}>
-              Creado el {new Date(proyecto.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}
-            </p>
+      <div style={{
+        background: "#ffffff",
+        border: "1px solid #e5e5e5",
+        borderRadius: 12,
+        marginBottom: 20,
+        padding: "12px 20px",
+        display: "flex",
+        alignItems: esMobil ? "stretch" : "center",
+        flexDirection: esMobil ? "column" : "row",
+        gap: esMobil ? 8 : 16,
+        flexWrap: "wrap",
+      }}>
+        <div style={{ flex: esMobil ? "none" : 1, minWidth: 0, width: esMobil ? "100%" : "auto" }}>
+          <h1 style={{ margin: "0 0 2px", fontSize: 16, fontWeight: 800, color: "#212121" }}>{proyecto.nombre}</h1>
+          <div style={{ fontSize: 12, color: "#555555", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span style={{ color: "#999999" }}>Cliente: </span>
+            <strong style={{ color: "#212121", fontWeight: 600 }}>{proyecto.clienteNombre}</strong>
+            <span style={{ color: "#cccccc" }}> · </span>
+            <span style={{ fontSize: 11, color: "#aaaaaa" }}>
+              {new Date(proyecto.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}
+            </span>
           </div>
-          {esGerente && proyecto.pinAcceso && (
-            <PinDisplay pin={proyecto.pinAcceso} onCambiar={() => setModalPin(true)} esMobil={esMobil} />
-          )}
         </div>
-        <div style={{ height: 1, background: "#f0f0f0" }} />
-        <div style={{ padding: "8px 20px", display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
-          <GrupoUsuarios titulo="Gerentes" usuarios={gerentesProyecto} />
-          {esGerente && proyecto.pinAcceso && (
+
+        {esGerente && gerentesProyecto.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", width: esMobil ? "100%" : "auto" }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>Gerente:</span>
+            {gerentesProyecto.map((u) => (
+              <span key={u.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "#212121", background: "#f5f5f5", padding: "4px 10px", borderRadius: 20, border: "1px solid #e5e5e5" }}>
+                <User size={10} style={{ color: "#c9a84c" }} /> {u.nombre}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {esGerente && proyecto.pinAcceso && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: esMobil ? "100%" : "auto" }}>
+            <span style={{ fontSize: 11, color: "#9ca3af" }}>PIN:</span>
+            <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: "0.15em", color: "#212121", fontVariantNumeric: "tabular-nums" }}>{proyecto.pinAcceso}</span>
+            <button
+              onClick={() => setModalPin(true)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 6, padding: "4px 8px", color: "#6b7280", fontSize: 11, cursor: "pointer" }}
+            >
+              <RefreshCw size={11} /> Cambiar
+            </button>
             <CopiarLinkCliente
               pin={proyecto.pinAcceso}
               habilitado={proyecto.claves?.some(c => ["ENVIADO","AUTORIZADO","LIBERADO","EN_PRODUCCION"].includes(c.estatus)) ?? false}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Sección de claves */}
@@ -1434,54 +1457,6 @@ function EstatusBadge({ estatus }) {
       <span style={{ width: 7, height: 7, borderRadius: "50%", background: conf.color, display: "inline-block" }} />
       {conf.label}
     </span>
-  );
-}
-
-function PinDisplay({ pin, onCambiar, esMobil }) {
-  const [copiado, setCopiado] = useState(false);
-  function copiar() {
-    navigator.clipboard.writeText(pin).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 1800); });
-  }
-  return (
-    <div style={{
-      background: "#f9f9f9",
-      border: "1px solid #e5e5e5",
-      borderRadius: 10,
-      padding: "7px 12px",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: esMobil ? "flex-start" : "center",
-      gap: 6,
-      width: esMobil ? "100%" : "auto",
-      minWidth: esMobil ? 0 : 160,
-    }}>
-      <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.1em" }}>PIN de acceso</span>
-      <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.15em", color: "#212121", fontVariantNumeric: "tabular-nums" }}>{pin}</span>
-      <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-        <button onClick={copiar} style={{ display: "flex", alignItems: "center", gap: 4, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 6, padding: "6px 10px", color: "#212121", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
-          <Copy size={12} /> {copiado ? "¡Copiado!" : "Copiar"}
-        </button>
-        <button onClick={onCambiar} style={{ display: "flex", alignItems: "center", gap: 4, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 6, padding: "6px 10px", color: "#6b7280", fontSize: 12, cursor: "pointer" }}>
-          <RefreshCw size={12} /> Cambiar
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function GrupoUsuarios({ titulo, usuarios }) {
-  if (!usuarios.length) return null;
-  return (
-    <div>
-      <p style={{ margin: "0 0 5px", fontSize: 10, fontWeight: 700, color: "#aaaaaa", textTransform: "uppercase", letterSpacing: "0.08em" }}>{titulo}</p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-        {usuarios.map((u) => (
-          <span key={u.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "#212121", background: "#f5f5f5", padding: "4px 10px", borderRadius: 20, border: "1px solid #e5e5e5" }}>
-            <User size={10} style={{ color: "#c9a84c" }} /> {u.nombre}
-          </span>
-        ))}
-      </div>
-    </div>
   );
 }
 
