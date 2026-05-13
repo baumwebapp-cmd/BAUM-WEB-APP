@@ -21,6 +21,7 @@ export async function GET() {
       where,
       orderBy: { createdAt: "desc" },
       include: {
+        cliente: { select: { nombre: true, nombreCorto: true } },
         claves: {
           select: {
             estatus: true,
@@ -68,7 +69,7 @@ export async function GET() {
       return {
         id: p.id,
         nombre: p.nombre,
-        clienteNombre: p.clienteNombre,
+        clienteNombre: p.cliente?.nombre || p.cliente?.nombreCorto || "Sin cliente",
         estatus: p.estatus,
         createdAt: p.createdAt,
         conteo,

@@ -245,7 +245,7 @@ export default function ProyectoDetallePage() {
           <h1 style={{ margin: "0 0 2px", fontSize: 16, fontWeight: 800, color: "#212121" }}>{proyecto.nombre}</h1>
           <div style={{ fontSize: 12, color: "#555555", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "#999999" }}>Cliente: </span>
-            <strong style={{ color: "#212121", fontWeight: 600 }}>{proyecto.clienteNombre}</strong>
+            <strong style={{ color: "#212121", fontWeight: 600 }}>{proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente"}</strong>
             <span style={{ color: "#cccccc" }}> · </span>
             <span style={{ fontSize: 11, color: "#aaaaaa" }}>
               {new Date(proyecto.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}
@@ -1534,8 +1534,17 @@ function ModalCambiarPin({ proyectoId, pinActual, onCerrar, onGuardado }) {
 
 function ModalEditarProyecto({ proyecto, onCerrar, onGuardado }) {
   const gerenteActual = proyecto.gerentes?.[0]?.usuario?.id || "";
-  const [form, setForm] = useState({ nombre: proyecto.nombre, clienteNombre: proyecto.clienteNombre, clienteContacto: proyecto.clienteContacto || "", estatus: proyecto.estatus, gerenteId: gerenteActual });
+  const [form, setForm] = useState({
+    nombre: proyecto.nombre,
+    clienteId: proyecto.clienteId ? String(proyecto.clienteId) : (proyecto.cliente?.id ? String(proyecto.cliente.id) : ""),
+    clienteContacto: proyecto.clienteContacto || "",
+    estatus: proyecto.estatus,
+    gerenteId: gerenteActual,
+  });
   const [gerentes, setGerentes] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [cargandoClientes, setCargandoClientes] = useState(true);
+  const [modalNuevoCliente, setModalNuevoCliente] = useState(false);
   const [err, setErr] = useState("");
   const [guardando, setGuardando] = useState(false);
 
@@ -1546,19 +1555,38 @@ function ModalEditarProyecto({ proyecto, onCerrar, onGuardado }) {
       .catch(() => {});
   }, []);
 
+  const cargarClientes = useCallback(async () => {
+    setCargandoClientes(true);
+    try {
+      const res = await fetch("/api/clientes");
+      const data = await res.json();
+      if (Array.isArray(data)) setClientes(data);
+    } finally {
+      setCargandoClientes(false);
+    }
+  }, []);
+
+  useEffect(() => { cargarClientes(); }, [cargarClientes]);
+
   function cambiar(campo, valor) { setForm((p) => ({ ...p, [campo]: valor })); setErr(""); }
 
   async function guardar(e) {
     e.preventDefault();
     if (!form.nombre.trim()) return setErr("El nombre es requerido.");
-    if (!form.clienteNombre.trim()) return setErr("El nombre del cliente es requerido.");
+    if (!form.clienteId) return setErr("Selecciona un cliente.");
     setGuardando(true);
     try {
       const gerentesIds = form.gerenteId ? [parseInt(form.gerenteId)] : [];
       const res = await fetch(`/api/proyectos/${proyecto.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: form.nombre.trim(), clienteNombre: form.clienteNombre.trim(), clienteContacto: form.clienteContacto.trim(), estatus: form.estatus, gerentesIds }),
+        body: JSON.stringify({
+          nombre: form.nombre.trim(),
+          clienteId: parseInt(form.clienteId),
+          clienteContacto: form.clienteContacto.trim(),
+          estatus: form.estatus,
+          gerentesIds,
+        }),
       });
       const data = await res.json();
       if (!res.ok) return setErr(data.error || "Error al actualizar.");
@@ -1567,35 +1595,75 @@ function ModalEditarProyecto({ proyecto, onCerrar, onGuardado }) {
   }
 
   return (
-    <Modal titulo="Editar proyecto" onCerrar={onCerrar}>
-      <form onSubmit={guardar} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <Campo label="Nombre del proyecto">
-          <input className="input-base" style={{ width: "100%" }} value={form.nombre} onChange={(e) => cambiar("nombre", e.target.value)} />
-        </Campo>
-        <Campo label="Nombre del cliente">
-          <input className="input-base" style={{ width: "100%" }} value={form.clienteNombre} onChange={(e) => cambiar("clienteNombre", e.target.value)} />
-        </Campo>
-        <Campo label="Nombre del contacto que firmará">
-          <input className="input-base" style={{ width: "100%" }} placeholder="Ej. Juan Pérez García" value={form.clienteContacto} onChange={(e) => cambiar("clienteContacto", e.target.value)} />
-        </Campo>
-        <Campo label="Estatus del proyecto">
-          <select className="input-base" style={{ width: "100%" }} value={form.estatus} onChange={(e) => cambiar("estatus", e.target.value)}>
-            {Object.keys(ESTATUS_PROYECTO).map((s) => <option key={s} value={s}>{ESTATUS_PROYECTO[s].label}</option>)}
-          </select>
-        </Campo>
-        <Campo label="Gerente asignado">
-          <select className="input-base" style={{ width: "100%" }} value={form.gerenteId} onChange={(e) => cambiar("gerenteId", e.target.value)}>
-            <option value="">Sin gerente</option>
-            {gerentes.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
-          </select>
-        </Campo>
-        {err && <p style={{ margin: 0, color: "#ef4444", fontSize: 13 }}>{err}</p>}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
-          <button type="button" className="btn-secundario" onClick={onCerrar} disabled={guardando}>Cancelar</button>
-          <button type="submit" className="btn-primario" disabled={guardando}>{guardando ? "Guardando…" : "Guardar"}</button>
-        </div>
-      </form>
-    </Modal>
+    <>
+      <Modal titulo="Editar proyecto" onCerrar={onCerrar}>
+        <form onSubmit={guardar} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Campo label="Nombre del proyecto">
+            <input className="input-base" style={{ width: "100%" }} value={form.nombre} onChange={(e) => cambiar("nombre", e.target.value)} />
+          </Campo>
+          <Campo label="Cliente">
+            {cargandoClientes ? (
+              <div style={{ fontSize: 12, color: "#9ca3af" }}>Cargando clientes…</div>
+            ) : clientes.length === 0 ? (
+              <div style={{ padding: "10px 14px", background: "#fff7ed", border: "1px solid #fdba74", borderRadius: 8, color: "#9a3412", fontSize: 12 }}>
+                No hay clientes registrados.
+                <div style={{ marginTop: 8 }}>
+                  <button type="button" onClick={() => setModalNuevoCliente(true)} style={{ background: "#c9a84c", border: "none", borderRadius: 6, padding: "6px 12px", color: "#212121", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
+                    <Plus size={12} style={{ verticalAlign: "middle", marginRight: 4 }} /> Nuevo cliente
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 6 }}>
+                <SelectorCliente
+                  clientes={clientes}
+                  valor={form.clienteId}
+                  onCambio={(id) => cambiar("clienteId", id)}
+                  disabled={guardando}
+                />
+                <button
+                  type="button"
+                  onClick={() => setModalNuevoCliente(true)}
+                  style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "0 12px", color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center" }}
+                  title="Crear cliente"
+                >
+                  <Plus size={15} />
+                </button>
+              </div>
+            )}
+          </Campo>
+          <Campo label="Nombre del contacto que firmará">
+            <input className="input-base" style={{ width: "100%" }} placeholder="Ej. Juan Pérez García" value={form.clienteContacto} onChange={(e) => cambiar("clienteContacto", e.target.value)} />
+          </Campo>
+          <Campo label="Estatus del proyecto">
+            <select className="input-base" style={{ width: "100%" }} value={form.estatus} onChange={(e) => cambiar("estatus", e.target.value)}>
+              {Object.keys(ESTATUS_PROYECTO).map((s) => <option key={s} value={s}>{ESTATUS_PROYECTO[s].label}</option>)}
+            </select>
+          </Campo>
+          <Campo label="Gerente asignado">
+            <select className="input-base" style={{ width: "100%" }} value={form.gerenteId} onChange={(e) => cambiar("gerenteId", e.target.value)}>
+              <option value="">Sin gerente</option>
+              {gerentes.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+            </select>
+          </Campo>
+          {err && <p style={{ margin: 0, color: "#ef4444", fontSize: 13 }}>{err}</p>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+            <button type="button" className="btn-secundario" onClick={onCerrar} disabled={guardando}>Cancelar</button>
+            <button type="submit" className="btn-primario" disabled={guardando}>{guardando ? "Guardando…" : "Guardar"}</button>
+          </div>
+        </form>
+      </Modal>
+      {modalNuevoCliente && (
+        <MiniModalCliente
+          onCerrar={() => setModalNuevoCliente(false)}
+          onCreado={async (nuevo) => {
+            await cargarClientes();
+            cambiar("clienteId", String(nuevo.id));
+            setModalNuevoCliente(false);
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -1900,4 +1968,139 @@ function sBtnPlano(color) {
     cursor: "pointer",
     whiteSpace: "nowrap",
   };
+}
+
+function SelectorCliente({ clientes, valor, onCambio, disabled }) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const seleccionado = clientes.find((c) => String(c.id) === String(valor));
+
+  const filtrados = busqueda.trim()
+    ? clientes.filter((c) => {
+        const q = busqueda.toLowerCase();
+        return c.nombre.toLowerCase().includes(q) || c.nombreCorto.toLowerCase().includes(q);
+      })
+    : clientes;
+
+  return (
+    <div style={{ position: "relative", flex: 1 }}>
+      <button
+        type="button"
+        onClick={() => !disabled && setAbierto((a) => !a)}
+        disabled={disabled}
+        style={{
+          width: "100%",
+          textAlign: "left",
+          background: "#ffffff",
+          border: "1.5px solid #e0e0e0",
+          borderRadius: 8,
+          padding: "11px 14px",
+          fontSize: 14,
+          color: seleccionado ? "#212121" : "#9ca3af",
+          cursor: disabled ? "not-allowed" : "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {seleccionado ? `${seleccionado.nombreCorto} — ${seleccionado.nombre}` : "Selecciona un cliente"}
+        </span>
+        <span style={{ color: "#9ca3af", flexShrink: 0, marginLeft: 8 }}>▾</span>
+      </button>
+      {abierto && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.08)", maxHeight: 260, overflowY: "auto", zIndex: 30 }}>
+          <div style={{ padding: 8, borderBottom: "1px solid #f0f0f0", position: "sticky", top: 0, background: "#ffffff" }}>
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar cliente..."
+              autoFocus
+              style={{ width: "100%", padding: "7px 10px", border: "1px solid #e5e5e5", borderRadius: 6, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+            />
+          </div>
+          {filtrados.length === 0 ? (
+            <div style={{ padding: 14, fontSize: 12, color: "#9ca3af", textAlign: "center" }}>Sin coincidencias</div>
+          ) : (
+            filtrados.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { onCambio(String(c.id)); setAbierto(false); setBusqueda(""); }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  background: String(c.id) === String(valor) ? "#fffbeb" : "transparent",
+                  border: "none",
+                  padding: "9px 12px",
+                  fontSize: 13,
+                  color: "#212121",
+                  cursor: "pointer",
+                }}
+              >
+                <strong style={{ fontWeight: 600 }}>{c.nombreCorto}</strong>
+                <span style={{ color: "#6b7280" }}> — {c.nombre}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniModalCliente({ onCerrar, onCreado }) {
+  const [nombre, setNombre] = useState("");
+  const [nombreCorto, setNombreCorto] = useState("");
+  const [err, setErr] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e) {
+    e.preventDefault();
+    if (!nombre.trim()) return setErr("Nombre requerido");
+    if (!nombreCorto.trim()) return setErr("Nombre corto requerido");
+    setGuardando(true);
+    try {
+      const res = await fetch("/api/clientes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre, nombreCorto }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErr(data.error || "Error al crear");
+        return;
+      }
+      onCreado(data);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCerrar()} style={{ zIndex: 60 }}>
+      <div className="modal-contenido" style={{ maxWidth: 380, padding: 22 }}>
+        <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#212121" }}>Nuevo cliente</h3>
+        <form onSubmit={guardar} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {err && <div style={{ padding: "8px 12px", background: "#fee2e2", borderRadius: 6, color: "#991b1b", fontSize: 12 }}>{err}</div>}
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Nombre *</label>
+            <input className="input-base" style={{ width: "100%" }} value={nombre} onChange={(e) => setNombre(e.target.value)} disabled={guardando} autoFocus />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Nombre corto *</label>
+            <input className="input-base" style={{ width: "100%" }} value={nombreCorto} onChange={(e) => setNombreCorto(e.target.value)} disabled={guardando} />
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" onClick={onCerrar} disabled={guardando} style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "7px 14px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+            <button type="submit" disabled={guardando} style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "7px 14px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.7 : 1 }}>
+              {guardando ? "Guardando…" : "Crear"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }

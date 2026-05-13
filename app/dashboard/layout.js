@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FolderOpen,
   Users,
+  Building2,
   FileText,
   Package,
   LogOut,
@@ -18,29 +19,31 @@ import {
 const NAV_POR_ROL = {
   DUENO: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
+    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
+    { href: "/dashboard/clientes", label: "Clientes", icono: Building2 },
     { href: "/dashboard/usuarios", label: "Usuarios", icono: Users },
   ],
   SUPERADMIN: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
+    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
+    { href: "/dashboard/clientes", label: "Clientes", icono: Building2 },
     { href: "/dashboard/usuarios", label: "Usuarios", icono: Users },
   ],
   GERENTE: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
+    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
   ],
   DISENADOR: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
+    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
   ],
   COSTOS: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
+    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
   ],
   PRODUCCION: [
     { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
+    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
   ],
 };
 

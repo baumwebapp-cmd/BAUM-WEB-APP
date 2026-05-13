@@ -31,7 +31,7 @@ export async function GET() {
       select: {
         id: true,
         nombre: true,
-        clienteNombre: true,
+        cliente: { select: { nombre: true, nombreCorto: true } },
         claves: {
           select: {
             estatus: true,
@@ -71,7 +71,7 @@ export async function GET() {
       else if (estatuses.has("ENVIADO")) etapa = "Esperando cliente";
       else if (estatuses.has("AUTORIZADO")) etapa = "Pendiente costos";
 
-      return { id: p.id, nombre: p.nombre, clienteNombre: p.clienteNombre, total, completadas, semaforo, etapa };
+      return { id: p.id, nombre: p.nombre, clienteNombre: p.cliente?.nombre || p.cliente?.nombreCorto || "Sin cliente", total, completadas, semaforo, etapa };
     });
 
     const ordenSemaforo = { rojo: 0, amarillo: 1, verde: 2 };

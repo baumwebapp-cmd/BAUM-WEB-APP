@@ -10,6 +10,7 @@ function generarPIN() {
 }
 
 const INCLUDE_PROYECTO = {
+  cliente: { select: { id: true, nombre: true, nombreCorto: true } },
   gerentes: { include: { usuario: { select: { id: true, nombre: true, email: true } } } },
   claves: { select: { id: true, estatus: true, codigo: true, updatedAt: true } },
 };
@@ -40,10 +41,17 @@ export async function POST(req) {
 
   try {
     const body = await req.json();
-    const { nombre, clienteNombre, clienteContacto, gerentesIds = [] } = body;
+    const { nombre, clienteId, clienteContacto, gerentesIds = [] } = body;
 
     if (!nombre?.trim()) return NextResponse.json({ error: "El nombre es requerido" }, { status: 400 });
-    if (!clienteNombre?.trim()) return NextResponse.json({ error: "El nombre del cliente es requerido" }, { status: 400 });
+    const clienteIdNum = clienteId != null ? parseInt(clienteId) : null;
+    if (!clienteIdNum || isNaN(clienteIdNum)) {
+      return NextResponse.json({ error: "Selecciona un cliente válido" }, { status: 400 });
+    }
+    const cliente = await prisma.cliente.findUnique({ where: { id: clienteIdNum }, select: { id: true, activo: true } });
+    if (!cliente) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+    if (!cliente.activo) return NextResponse.json({ error: "El cliente está inactivo" }, { status: 400 });
+
     if (gerentesIds.length > 1) {
       return NextResponse.json({ error: "Solo se puede asignar un gerente por proyecto" }, { status: 400 });
     }
@@ -58,7 +66,7 @@ export async function POST(req) {
     const proyecto = await prisma.proyecto.create({
       data: {
         nombre: nombre.trim(),
-        clienteNombre: clienteNombre.trim(),
+        clienteId: clienteIdNum,
         clienteContacto: clienteContacto?.trim() || null,
         pinAcceso,
         gerentes: {

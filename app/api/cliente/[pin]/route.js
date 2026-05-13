@@ -25,7 +25,7 @@ export async function GET(req, { params }) {
       select: {
         id: true,
         nombre: true,
-        clienteNombre: true,
+        cliente: { select: { nombre: true, nombreCorto: true } },
         clienteContacto: true,
         estatus: true,
         createdAt: true,
@@ -71,7 +71,9 @@ export async function GET(req, { params }) {
     const ESTATUS_VISIBLES = ["ENVIADO", "AUTORIZADO", "LIBERADO", "EN_PRODUCCION"];
     const clavesVisibles = proyecto.claves.filter((c) => ESTATUS_VISIBLES.includes(c.estatus));
 
-    return NextResponse.json({ ...proyecto, claves: clavesVisibles });
+    const clienteNombre = proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente";
+
+    return NextResponse.json({ ...proyecto, clienteNombre, claves: clavesVisibles });
   } catch (error) {
     console.error("[GET /api/cliente/[pin]]", error);
     return NextResponse.json({ error: "Error al cargar el proyecto" }, { status: 500 });

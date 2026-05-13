@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 const ROLES_PUEDEN_EDITAR = ["DUENO", "SUPERADMIN", "GERENTE"];
 
 const INCLUDE_DETALLE = {
+  cliente: { select: { id: true, nombre: true, nombreCorto: true, razonSocial: true, rfc: true } },
   gerentes: { include: { usuario: { select: { id: true, nombre: true, email: true } } } },
   claves: {
     include: {
@@ -58,7 +59,7 @@ export async function PATCH(req, { params }) {
 
   try {
     const body = await req.json();
-    const { nombre, clienteNombre, clienteContacto, estatus, gerentesIds, pinAcceso } = body;
+    const { nombre, clienteId, clienteContacto, estatus, gerentesIds, pinAcceso } = body;
 
     if (gerentesIds !== undefined && gerentesIds.length > 1) {
       return NextResponse.json({ error: "Solo se puede asignar un gerente por proyecto" }, { status: 400 });
@@ -66,7 +67,16 @@ export async function PATCH(req, { params }) {
 
     const datos = {};
     if (nombre !== undefined) datos.nombre = nombre.trim();
-    if (clienteNombre !== undefined) datos.clienteNombre = clienteNombre.trim();
+    if (clienteId !== undefined) {
+      const clienteIdNum = clienteId != null ? parseInt(clienteId) : null;
+      if (!clienteIdNum || isNaN(clienteIdNum)) {
+        return NextResponse.json({ error: "Selecciona un cliente válido" }, { status: 400 });
+      }
+      const cliente = await prisma.cliente.findUnique({ where: { id: clienteIdNum }, select: { id: true, activo: true } });
+      if (!cliente) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+      if (!cliente.activo) return NextResponse.json({ error: "El cliente está inactivo" }, { status: 400 });
+      datos.clienteId = clienteIdNum;
+    }
     if (clienteContacto !== undefined) datos.clienteContacto = clienteContacto?.trim() || null;
     if (estatus !== undefined) datos.estatus = estatus;
     if (pinAcceso !== undefined) {

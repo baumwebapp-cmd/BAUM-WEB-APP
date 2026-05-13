@@ -23,7 +23,7 @@ export async function POST(req, { params }) {
         clave: {
           include: {
             proyecto: {
-              select: { id: true, nombre: true, clienteNombre: true, pinAcceso: true },
+              select: { id: true, nombre: true, cliente: { select: { nombre: true, nombreCorto: true } }, pinAcceso: true },
             },
           },
         },

@@ -44,6 +44,39 @@ async function main() {
 
   console.log("Usuarios listos");
 
+  await prisma.modulo.upsert({
+    where: { slug: "planos" },
+    update: {},
+    create: {
+      nombre: "Planos",
+      slug: "planos",
+      descripcion: "Gestión de planos técnicos y autorizaciones",
+    },
+  });
+
+  console.log("Módulos listos");
+
+  const clientesSeed = [
+    { nombre: "Desarrolladora Nativa SA de CV", nombreCorto: "Nativa" },
+    { nombre: "SUA SA de CV", nombreCorto: "SUA" },
+    { nombre: "Consur FR", nombreCorto: "Consur" },
+    { nombre: "Hotel SA", nombreCorto: "Hotel SA" },
+    { nombre: "Yamile SA", nombreCorto: "Yamile" },
+    { nombre: "Pedrito Constructora", nombreCorto: "Pedrito" },
+    { nombre: "Constructora Muretto", nombreCorto: "Muretto" },
+  ];
+
+  const clientesPorNombre = {};
+  for (const c of clientesSeed) {
+    const existente = await prisma.cliente.findFirst({ where: { nombre: c.nombre } });
+    const cliente = existente
+      ? existente
+      : await prisma.cliente.create({ data: c });
+    clientesPorNombre[c.nombre] = cliente;
+  }
+
+  console.log("Clientes listos");
+
   const ahora = new Date();
   const hace10h = new Date(ahora.getTime() - 10 * 60 * 60 * 1000);
   const hace30h = new Date(ahora.getTime() - 30 * 60 * 60 * 1000);
@@ -147,10 +180,12 @@ async function main() {
       continue;
     }
 
+    const cliente = clientesPorNombre[p.clienteNombre];
+
     const proyecto = await prisma.proyecto.create({
       data: {
         nombre: p.nombre,
-        clienteNombre: p.clienteNombre,
+        clienteId: cliente?.id,
         pinAcceso: p.pinAcceso,
         createdAt: p.fechaProyecto,
         gerentes: {

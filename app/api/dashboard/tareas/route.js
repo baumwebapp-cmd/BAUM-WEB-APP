@@ -34,13 +34,21 @@ export async function GET() {
           select: {
             id: true,
             nombre: true,
-            clienteNombre: true,
+            cliente: { select: { nombre: true, nombreCorto: true } },
           },
         },
       },
     });
 
-    return NextResponse.json(claves);
+    const respuesta = claves.map((c) => ({
+      ...c,
+      proyecto: {
+        ...c.proyecto,
+        clienteNombre: c.proyecto?.cliente?.nombre || c.proyecto?.cliente?.nombreCorto || "Sin cliente",
+      },
+    }));
+
+    return NextResponse.json(respuesta);
   } catch (error) {
     console.error("[GET /api/dashboard/tareas]", error);
     return NextResponse.json({ error: "Error al obtener tareas" }, { status: 500 });

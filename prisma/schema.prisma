@@ -7,39 +7,84 @@ datasource db {
 }
 
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  nombre    String
-  email     String   @unique
-  password  String
-  rol       Rol
-  activo    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  email        String   @unique
+  password     String
+  rol          Rol
+  puesto       String?
+  departamento String?
+  telefono     String?
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   proyectosGerente ProyectoGerente[]
   clavesCreadas    Clave[]
   planosSubidos    Plano[]
   autorizaciones   AutorizacionInterna[]
   auditoriaAdmin   AuditoriaAdmin[]
+  permisos         PermisoUsuario[]
 
   @@index([rol])
   @@index([activo])
 }
 
+model Cliente {
+  id           Int       @id @default(autoincrement())
+  nombre       String
+  nombreCorto  String
+  descripcion  String?
+  razonSocial  String?
+  rfc          String?
+  activo       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  proyectos    Proyecto[]
+
+  @@index([activo])
+}
+
+model Modulo {
+  id          Int       @id @default(autoincrement())
+  nombre      String
+  slug        String    @unique
+  descripcion String?
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  permisos    PermisoUsuario[]
+}
+
+model PermisoUsuario {
+  id        Int          @id @default(autoincrement())
+  usuarioId Int
+  moduloId  Int
+  nivel     NivelPermiso @default(VER)
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  modulo    Modulo  @relation(fields: [moduloId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, moduloId])
+}
+
 model Proyecto {
   id              Int             @id @default(autoincrement())
   nombre          String
-  clienteNombre   String
+  clienteId       Int?
   clienteContacto String?
   pinAcceso       String          @unique
   estatus         EstatusProyecto @default(ACTIVO)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
+  cliente  Cliente? @relation(fields: [clienteId], references: [id])
   gerentes ProyectoGerente[]
   claves   Clave[]
 
   @@index([estatus])
+  @@index([clienteId])
 }
 
 model ProyectoGerente {
@@ -76,9 +121,9 @@ model Clave {
 }
 
 model Plano {
-  id          Int      @id @default(autoincrement())
-  claveId     Int
-  urlPdf      String   @db.Text
+  id                Int      @id @default(autoincrement())
+  claveId           Int
+  urlPdf            String   @db.Text
   version           Int      @default(1)
   subidoPorId       Int
   comentariosCostos String?  @db.Text
@@ -167,6 +212,12 @@ enum Rol {
   DISENADOR
   COSTOS
   PRODUCCION
+}
+
+enum NivelPermiso {
+  VER
+  EDITAR
+  ADMIN
 }
 
 enum EstatusProyecto {

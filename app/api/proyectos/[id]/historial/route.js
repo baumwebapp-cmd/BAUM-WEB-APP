@@ -19,7 +19,7 @@ export async function GET(req, { params }) {
       where: { id: proyectoId },
       select: {
         nombre: true,
-        clienteNombre: true,
+        cliente: { select: { nombre: true, nombreCorto: true } },
         gerentes: { select: { usuarioId: true } },
       },
     });
@@ -137,7 +137,7 @@ export async function GET(req, { params }) {
 
     return NextResponse.json({
       nombre: proyecto.nombre,
-      clienteNombre: proyecto.clienteNombre,
+      clienteNombre: proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente",
       eventos,
     });
   } catch (error) {

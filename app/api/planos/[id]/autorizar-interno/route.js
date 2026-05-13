@@ -30,6 +30,7 @@ export async function POST(req, { params }) {
             proyecto: {
               include: {
                 gerentes: { select: { usuarioId: true } },
+                cliente: { select: { nombre: true, nombreCorto: true } },
               },
             },
           },
@@ -96,7 +97,7 @@ export async function POST(req, { params }) {
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-        const clienteNombre = plano.clave.proyecto.clienteNombre;
+        const clienteNombre = plano.clave.proyecto.cliente?.nombre || plano.clave.proyecto.cliente?.nombreCorto || "Cliente";
         const fechaEnvio = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
         const textoMarca = `CONFIDENCIAL — ${clienteNombre} — ${fechaEnvio}`;
 

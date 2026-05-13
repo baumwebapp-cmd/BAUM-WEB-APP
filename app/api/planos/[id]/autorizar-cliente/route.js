@@ -57,7 +57,7 @@ export async function POST(req, { params }) {
             proyecto: {
               select: {
                 nombre: true,
-                clienteNombre: true,
+                cliente: { select: { nombre: true, nombreCorto: true } },
                 pinAcceso: true,
               },
             },
@@ -129,7 +129,7 @@ export async function POST(req, { params }) {
       escribirCampo("PROYECTO:", plano.clave.proyecto.nombre);
       escribirCampo("CLAVE:", plano.clave.codigo);
       escribirCampo("VERSION:", `v${plano.version}`);
-      escribirCampo("CLIENTE:", plano.clave.proyecto.clienteNombre);
+      escribirCampo("CLIENTE:", plano.clave.proyecto.cliente?.nombre || plano.clave.proyecto.cliente?.nombreCorto || "Sin cliente");
 
       paginaAcuse.drawText("DESCRIPCION:", { x: 72, y, size: 10, font: helveticaBold, color: colorDato });
       const descripcion = plano.clave.descripcion || "";

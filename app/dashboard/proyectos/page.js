@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Plus, X, Copy, Check, Shuffle, Search,
-  ChevronLeft, ChevronRight, AlertCircle,
+  ChevronLeft, ChevronRight, ChevronDown, AlertCircle,
 } from "lucide-react";
 
 const POR_PAGINA = 10;
@@ -136,9 +136,15 @@ export default function ProyectosPage() {
   const filtrados = useMemo(() => {
     const termino = busqueda.toLowerCase();
     let lista = termino
-      ? proyectosConConteo.filter(
-          (p) => p.nombre.toLowerCase().includes(termino) || p.clienteNombre.toLowerCase().includes(termino)
-        )
+      ? proyectosConConteo.filter((p) => {
+          const cliNombre = (p.cliente?.nombre || "").toLowerCase();
+          const cliCorto = (p.cliente?.nombreCorto || "").toLowerCase();
+          return (
+            p.nombre.toLowerCase().includes(termino) ||
+            cliNombre.includes(termino) ||
+            cliCorto.includes(termino)
+          );
+        })
       : proyectosConConteo;
 
     if (filtroEstatus !== "TODOS") lista = lista.filter((p) => p.estatus === filtroEstatus);
@@ -508,7 +514,8 @@ function FilaProyecto({ proyecto, onClick }) {
   const completadas = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
   const porcentaje = totalClaves > 0 ? Math.round((completadas / totalClaves) * 100) : 0;
 
-  const palabras = proyecto.clienteNombre ? proyecto.clienteNombre.trim().split(/\s+/) : [];
+  const clienteDisplay = proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente";
+  const palabras = clienteDisplay.trim().split(/\s+/);
   const iniciales = palabras.slice(0, 2).map((w) => w[0] || "").join("").toUpperCase() || "?";
   const bgAvatar = colorAvatar(iniciales[0]);
 
@@ -532,7 +539,7 @@ function FilaProyecto({ proyecto, onClick }) {
           }}>
             {iniciales}
           </div>
-          <span style={{ fontSize: 13, color: "#212121", fontWeight: 500 }}>{proyecto.clienteNombre}</span>
+          <span style={{ fontSize: 13, color: "#212121", fontWeight: 500 }}>{clienteDisplay}</span>
         </div>
       </td>
       <td style={sTd}>
@@ -580,7 +587,8 @@ function CardProyecto({ proyecto, onClick }) {
   const completadas = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
   const porcentaje = totalClaves > 0 ? Math.round((completadas / totalClaves) * 100) : 0;
 
-  const palabras = proyecto.clienteNombre ? proyecto.clienteNombre.trim().split(/\s+/) : [];
+  const clienteDisplay = proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente";
+  const palabras = clienteDisplay.trim().split(/\s+/);
   const iniciales = palabras.slice(0, 2).map((w) => w[0] || "").join("").toUpperCase() || "?";
   const bgAvatar = colorAvatar(iniciales[0]);
 
@@ -618,7 +626,7 @@ function CardProyecto({ proyecto, onClick }) {
             {iniciales}
           </div>
           <span style={{ fontSize: 13, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {proyecto.clienteNombre}
+            {clienteDisplay}
           </span>
         </div>
         <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: est.bg, color: est.color, flexShrink: 0, marginLeft: 8 }}>
@@ -656,10 +664,26 @@ function CardProyecto({ proyecto, onClick }) {
 }
 
 function ModalCrearProyecto({ onCerrar, onCreado, gerentes }) {
-  const [form, setForm] = useState({ nombre: "", clienteNombre: "", clienteContacto: "", pinAcceso: generarPin(), gerenteId: "" });
+  const [form, setForm] = useState({ nombre: "", clienteId: "", clienteContacto: "", pinAcceso: generarPin(), gerenteId: "" });
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [pinCopiado, setPinCopiado] = useState(false);
+  const [clientes, setClientes] = useState([]);
+  const [cargandoClientes, setCargandoClientes] = useState(true);
+  const [modalNuevoCliente, setModalNuevoCliente] = useState(false);
+
+  const cargarClientes = useCallback(async () => {
+    setCargandoClientes(true);
+    try {
+      const res = await fetch("/api/clientes");
+      const data = await res.json();
+      if (Array.isArray(data)) setClientes(data);
+    } finally {
+      setCargandoClientes(false);
+    }
+  }, []);
+
+  useEffect(() => { cargarClientes(); }, [cargarClientes]);
 
   function copiarPin() {
     navigator.clipboard.writeText(form.pinAcceso);
@@ -671,7 +695,7 @@ function ModalCrearProyecto({ onCerrar, onCreado, gerentes }) {
     e.preventDefault();
     setError("");
     if (!form.nombre.trim()) return setError("El nombre del proyecto es requerido.");
-    if (!form.clienteNombre.trim()) return setError("El nombre del cliente es requerido.");
+    if (!form.clienteId) return setError("Selecciona un cliente.");
     if (!/^\d{6}$/.test(form.pinAcceso)) return setError("El PIN debe ser de exactamente 6 dígitos.");
     setCargando(true);
     try {
@@ -679,7 +703,7 @@ function ModalCrearProyecto({ onCerrar, onCreado, gerentes }) {
       const res = await fetch("/api/proyectos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: form.nombre, clienteNombre: form.clienteNombre, clienteContacto: form.clienteContacto, pinAcceso: form.pinAcceso, gerentesIds }),
+        body: JSON.stringify({ nombre: form.nombre, clienteId: parseInt(form.clienteId), clienteContacto: form.clienteContacto, pinAcceso: form.pinAcceso, gerentesIds }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al crear proyecto");
@@ -715,8 +739,31 @@ function ModalCrearProyecto({ onCerrar, onCreado, gerentes }) {
           </div>
 
           <div>
-            <label style={sLabel}>Cliente (desarrolladora) <span style={{ color: "#ef4444" }}>*</span></label>
-            <input className="input-base" placeholder="Ej: Grupo Inmobiliario ZAG" value={form.clienteNombre} onChange={(e) => setForm({ ...form, clienteNombre: e.target.value })} disabled={cargando} />
+            <label style={sLabel}>Cliente <span style={{ color: "#ef4444" }}>*</span></label>
+            {cargandoClientes ? (
+              <div style={{ fontSize: 12, color: "#9ca3af" }}>Cargando clientes…</div>
+            ) : clientes.length === 0 ? (
+              <div style={{ padding: "10px 14px", background: "#fff7ed", border: "1px solid #fdba74", borderRadius: 8, color: "#9a3412", fontSize: 12 }}>
+                No hay clientes registrados. Crea uno primero con el botón “+”.
+                <div style={{ marginTop: 8 }}>
+                  <button type="button" onClick={() => setModalNuevoCliente(true)} style={{ background: "#c9a84c", border: "none", borderRadius: 6, padding: "6px 12px", color: "#212121", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
+                    <Plus size={12} style={{ verticalAlign: "middle", marginRight: 4 }} /> Nuevo cliente
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 6 }}>
+                <SelectorCliente
+                  clientes={clientes}
+                  valor={form.clienteId}
+                  onCambio={(id) => setForm({ ...form, clienteId: id })}
+                  disabled={cargando}
+                />
+                <button type="button" onClick={() => setModalNuevoCliente(true)} style={sBtnIcono} title="Crear cliente">
+                  <Plus size={15} />
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
@@ -777,6 +824,152 @@ function ModalCrearProyecto({ onCerrar, onCreado, gerentes }) {
               {cargando
                 ? <><span className="spinner" style={{ borderTopColor: "#212121", width: 14, height: 14, borderWidth: 2 }} /> Creando…</>
                 : <><Plus size={14} /> Crear proyecto</>}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {modalNuevoCliente && (
+        <MiniModalCliente
+          onCerrar={() => setModalNuevoCliente(false)}
+          onCreado={async (nuevo) => {
+            await cargarClientes();
+            setForm((f) => ({ ...f, clienteId: String(nuevo.id) }));
+            setModalNuevoCliente(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SelectorCliente({ clientes, valor, onCambio, disabled }) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const seleccionado = clientes.find((c) => String(c.id) === String(valor));
+
+  const filtrados = busqueda.trim()
+    ? clientes.filter((c) => {
+        const q = busqueda.toLowerCase();
+        return c.nombre.toLowerCase().includes(q) || c.nombreCorto.toLowerCase().includes(q);
+      })
+    : clientes;
+
+  return (
+    <div style={{ position: "relative", flex: 1 }}>
+      <button
+        type="button"
+        onClick={() => !disabled && setAbierto((a) => !a)}
+        disabled={disabled}
+        style={{
+          width: "100%",
+          textAlign: "left",
+          background: "#ffffff",
+          border: "1.5px solid #e0e0e0",
+          borderRadius: 8,
+          padding: "11px 14px",
+          fontSize: 14,
+          color: seleccionado ? "#212121" : "#9ca3af",
+          cursor: disabled ? "not-allowed" : "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {seleccionado ? `${seleccionado.nombreCorto} — ${seleccionado.nombre}` : "Selecciona un cliente"}
+        </span>
+        <ChevronDown size={15} style={{ color: "#9ca3af", flexShrink: 0, marginLeft: 8 }} />
+      </button>
+      {abierto && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.08)", maxHeight: 260, overflowY: "auto", zIndex: 30 }}>
+          <div style={{ padding: 8, borderBottom: "1px solid #f0f0f0", position: "sticky", top: 0, background: "#ffffff" }}>
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar cliente..."
+              autoFocus
+              style={{ width: "100%", padding: "7px 10px", border: "1px solid #e5e5e5", borderRadius: 6, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+            />
+          </div>
+          {filtrados.length === 0 ? (
+            <div style={{ padding: 14, fontSize: 12, color: "#9ca3af", textAlign: "center" }}>Sin coincidencias</div>
+          ) : (
+            filtrados.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { onCambio(String(c.id)); setAbierto(false); setBusqueda(""); }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  background: String(c.id) === String(valor) ? "#fffbeb" : "transparent",
+                  border: "none",
+                  padding: "9px 12px",
+                  fontSize: 13,
+                  color: "#212121",
+                  cursor: "pointer",
+                }}
+              >
+                <strong style={{ fontWeight: 600 }}>{c.nombreCorto}</strong>
+                <span style={{ color: "#6b7280" }}> — {c.nombre}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniModalCliente({ onCerrar, onCreado }) {
+  const [nombre, setNombre] = useState("");
+  const [nombreCorto, setNombreCorto] = useState("");
+  const [err, setErr] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e) {
+    e.preventDefault();
+    if (!nombre.trim()) return setErr("Nombre requerido");
+    if (!nombreCorto.trim()) return setErr("Nombre corto requerido");
+    setGuardando(true);
+    try {
+      const res = await fetch("/api/clientes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre, nombreCorto }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErr(data.error || "Error al crear");
+        return;
+      }
+      onCreado(data);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCerrar()} style={{ zIndex: 60 }}>
+      <div className="modal-contenido" style={{ maxWidth: 380, padding: 22 }}>
+        <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#212121" }}>Nuevo cliente</h3>
+        <form onSubmit={guardar} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {err && <div style={{ padding: "8px 12px", background: "#fee2e2", borderRadius: 6, color: "#991b1b", fontSize: 12 }}>{err}</div>}
+          <div>
+            <label style={sLabel}>Nombre <span style={{ color: "#ef4444" }}>*</span></label>
+            <input className="input-base" style={{ width: "100%" }} value={nombre} onChange={(e) => setNombre(e.target.value)} disabled={guardando} autoFocus />
+          </div>
+          <div>
+            <label style={sLabel}>Nombre corto <span style={{ color: "#ef4444" }}>*</span></label>
+            <input className="input-base" style={{ width: "100%" }} value={nombreCorto} onChange={(e) => setNombreCorto(e.target.value)} disabled={guardando} />
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" onClick={onCerrar} disabled={guardando} style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "7px 14px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+            <button type="submit" disabled={guardando} style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "7px 14px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.7 : 1 }}>
+              {guardando ? "Guardando…" : "Crear"}
             </button>
           </div>
         </form>
