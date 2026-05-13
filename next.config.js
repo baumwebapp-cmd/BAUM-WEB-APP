@@ -1,14 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   allowedDevOrigins: ['192.168.100.150'],
-  
+
   experimental: {
     serverActions: {
       bodySizeLimit: '52mb',
     },
+    middlewareClientMaxBodySize: 52 * 1024 * 1024,
   },
-
-  middlewareClientMaxBodySize: 52 * 1024 * 1024, // 52MB en bytes
 
   images: {
     remotePatterns: [

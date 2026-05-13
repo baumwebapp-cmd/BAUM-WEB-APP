@@ -6,6 +6,9 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { DIRECTORIO_PLANOS, esPdfValido } from "@/lib/archivos";
 
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function POST(req) {
   const sesion = await getServerSession(authOptions);
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -114,3 +117,9 @@ export async function POST(req) {
     return NextResponse.json({ error: "Error al procesar el plano" }, { status: 500 });
   }
 }
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
