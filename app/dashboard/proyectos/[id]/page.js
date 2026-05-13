@@ -365,7 +365,12 @@ export default function ProyectoDetallePage() {
 
 /* ── Pipeline simplificado para móvil ── */
 function PipelineSimple({ pipeline, jefeClicable, clienteClicable, costosClicable, produccionClicable, onClickJefe, onClickCliente, onClickCostos, onClickProduccion, onVerComentario }) {
-  const COLOR_NODO = { PENDIENTE: "#e5e7eb", EN_PROCESO: "#c9a84c", COMPLETADO: "#10b981", RECHAZADO: "#ef4444" };
+  const COLOR_NODO = {
+    PENDIENTE:  "#b1b0ac",
+    EN_PROCESO: "#dba03a",
+    COMPLETADO: "#369378",
+    RECHAZADO:  "#dc4f5a",
+  };
   const NODOS = [
     { key: "jefe",       label: "Jefe área",  nodo: pipeline.jefe,       clicable: jefeClicable,       onClick: onClickJefe },
     { key: "cliente",    label: "Cliente",    nodo: pipeline.cliente,    clicable: clienteClicable,    onClick: onClickCliente },
@@ -868,7 +873,7 @@ function PipelineVisual({ pipeline, jefeClicable, clienteClicable, costosClicabl
 }
 
 function Conector({ completado, destinoRechazado }) {
-  const background = destinoRechazado ? "#ef4444" : completado ? "#10b981" : "#e5e7eb";
+  const background = destinoRechazado ? "#dc4f5a" : completado ? "#369378" : "#dedede";
   return (
     <div style={{
       flex: 1,
@@ -882,10 +887,10 @@ function Conector({ completado, destinoRechazado }) {
 }
 
 const NODO_CONFIG = {
-  PENDIENTE:  { bg: "#f3f4f6", border: "#e5e7eb", Icono: Minus,        colorIcono: "#d1d5db" },
-  EN_PROCESO: { bg: "#fef9c3", border: "#c9a84c", Icono: Settings,     colorIcono: "#c9a84c" },
-  COMPLETADO: { bg: "#dcfce7", border: "#10b981", Icono: Check,        colorIcono: "#10b981" },
-  RECHAZADO:  { bg: "#fee2e2", border: "#ef4444", Icono: X,            colorIcono: "#ef4444" },
+  PENDIENTE:  { bg: "#f5f5ea", border: "#b1b0ac", Icono: Minus,    colorIcono: "#a2a29a" },
+  EN_PROCESO: { bg: "#fbefd9", border: "#dba03a", Icono: Settings, colorIcono: "#74551d" },
+  COMPLETADO: { bg: "#e4f2ed", border: "#369378", Icono: Check,    colorIcono: "#467564" },
+  RECHAZADO:  { bg: "#fce5ef", border: "#dc4f5a", Icono: X,        colorIcono: "#9d2937" },
 };
 
 function NodoPipeline({ titulo, estado, nombre, fecha, comentario, clicable, onClick, onVerComentario }) {
@@ -1470,7 +1475,6 @@ function CopiarLinkCliente({ pin, habilitado }) {
   }
   return (
     <div>
-      <p style={{ margin: "0 0 5px", fontSize: 10, fontWeight: 700, color: "#aaaaaa", textTransform: "uppercase", letterSpacing: "0.08em" }}>Link del cliente</p>
       <button
         onClick={copiar}
         disabled={!habilitado}
