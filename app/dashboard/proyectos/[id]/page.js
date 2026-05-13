@@ -230,17 +230,16 @@ export default function ProyectoDetallePage() {
 
       {/* Header del proyecto */}
       <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, marginBottom: 20, overflow: "hidden" }}>
-        <div style={{ padding: "22px 24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
+        <div style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#212121" }}>{proyecto.nombre}</h1>
-              <EstatusBadge estatus={proyecto.estatus} />
+            <div style={{ marginBottom: 8 }}>
+              <h1 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#212121" }}>{proyecto.nombre}</h1>
             </div>
-            <p style={{ margin: "0 0 4px", fontSize: 14, color: "#555555" }}>
+            <p style={{ margin: "0 0 4px", fontSize: 13, color: "#555555" }}>
               <span style={{ color: "#999999" }}>Cliente: </span>
               <strong style={{ color: "#212121", fontWeight: 600 }}>{proyecto.clienteNombre}</strong>
             </p>
-            <p style={{ margin: 0, fontSize: 12, color: "#aaaaaa" }}>
+            <p style={{ margin: 0, fontSize: 11, color: "#aaaaaa" }}>
               Creado el {new Date(proyecto.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}
             </p>
           </div>
@@ -249,7 +248,7 @@ export default function ProyectoDetallePage() {
           )}
         </div>
         <div style={{ height: 1, background: "#f0f0f0" }} />
-        <div style={{ padding: "12px 24px", display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
+        <div style={{ padding: "8px 20px", display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
           <GrupoUsuarios titulo="Gerentes" usuarios={gerentesProyecto} />
           {esGerente && proyecto.pinAcceso && (
             <CopiarLinkCliente
@@ -500,12 +499,8 @@ function CardClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
       )}
 
       <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: 16, marginBottom: 8 }}>
-        {/* Fila 1: código + badge */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ marginBottom: 8 }}>
           <span style={{ fontWeight: 700, fontSize: 15, color: "#212121" }}>{clave.codigo}</span>
-          <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 6, background: cfg.bg, color: cfg.color }}>
-            {cfg.label}
-          </span>
         </div>
 
         {/* Descripción */}
@@ -727,9 +722,6 @@ function FilaClave({ clave, rol, usuarioId, gerentesProyecto, pinAcceso, puedeSu
           <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>
             {clave.descripcion}
           </div>
-          <span style={{ display: "inline-block", marginTop: 6, fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 6, background: ESTATUS_CLAVE[clave.estatus]?.bg || "#f3f4f6", color: ESTATUS_CLAVE[clave.estatus]?.color || "#6b7280" }}>
-            {ESTATUS_CLAVE[clave.estatus]?.label || clave.estatus}
-          </span>
         </td>
 
         {/* DESCRIPCIÓN */}
@@ -1455,7 +1447,7 @@ function PinDisplay({ pin, onCambiar, esMobil }) {
       background: "#f9f9f9",
       border: "1px solid #e5e5e5",
       borderRadius: 10,
-      padding: "10px 14px",
+      padding: "7px 12px",
       display: "flex",
       flexDirection: "column",
       alignItems: esMobil ? "flex-start" : "center",
@@ -1463,8 +1455,8 @@ function PinDisplay({ pin, onCambiar, esMobil }) {
       width: esMobil ? "100%" : "auto",
       minWidth: esMobil ? 0 : 160,
     }}>
-      <span style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.1em" }}>PIN de acceso</span>
-      <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: "0.15em", color: "#212121", fontVariantNumeric: "tabular-nums" }}>{pin}</span>
+      <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.1em" }}>PIN de acceso</span>
+      <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.15em", color: "#212121", fontVariantNumeric: "tabular-nums" }}>{pin}</span>
       <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
         <button onClick={copiar} style={{ display: "flex", alignItems: "center", gap: 4, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 6, padding: "6px 10px", color: "#212121", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
           <Copy size={12} /> {copiado ? "¡Copiado!" : "Copiar"}
