@@ -28,7 +28,6 @@ const ETIQUETA_ROL = {
   GERENTE:    "Gerente",
   DISENADOR:  "Diseñador",
   COSTOS:     "Costos",
-  PRODUCCION: "Producción",
 };
 
 function estaActivo(pathname, href, exacto) {

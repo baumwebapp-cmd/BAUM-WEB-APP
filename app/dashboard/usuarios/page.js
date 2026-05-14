@@ -10,7 +10,6 @@ const ETIQUETA_ROL = {
   GERENTE:    "Gerente",
   DISENADOR:  "Diseñador",
   COSTOS:     "Costos",
-  PRODUCCION: "Producción",
 };
 
 const COLOR_ROL = {
@@ -19,18 +18,17 @@ const COLOR_ROL = {
   GERENTE:    { background: "#1a1a1a", color: "#c9a84c" },
   DISENADOR:  { background: "#1e3a5f", color: "#93c5fd" },
   COSTOS:     { background: "#14532d", color: "#86efac" },
-  PRODUCCION: { background: "#4a1d1d", color: "#fca5a5" },
 };
 
 function rolesVisibles(rolActual) {
-  if (rolActual === "DUENO") return ["DUENO", "SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
-  if (rolActual === "SUPERADMIN") return ["GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+  if (rolActual === "DUENO") return ["DUENO", "SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS"];
+  if (rolActual === "SUPERADMIN") return ["GERENTE", "DISENADOR", "COSTOS"];
   return [];
 }
 
 function rolesCreables(rolActual) {
-  if (rolActual === "DUENO") return ["SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
-  if (rolActual === "SUPERADMIN") return ["GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+  if (rolActual === "DUENO") return ["SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS"];
+  if (rolActual === "SUPERADMIN") return ["GERENTE", "DISENADOR", "COSTOS"];
   return [];
 }
 

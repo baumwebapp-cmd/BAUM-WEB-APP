@@ -292,7 +292,7 @@ export default function PlanosClientePage() {
           ) : (
             <div>
               {paginados.map((p) => (
-                <CardProyecto key={p.id} proyecto={p} />
+                <CardProyecto key={p.id} proyecto={p} onClick={() => router.push(`/dashboard/proyectos/${clienteId}/planos/${p.id}`)} />
               ))}
             </div>
           )}
@@ -347,7 +347,7 @@ export default function PlanosClientePage() {
                     </tr>
                   ) : (
                     paginados.map((p) => (
-                      <FilaProyecto key={p.id} proyecto={p} />
+                      <FilaProyecto key={p.id} proyecto={p} onClick={() => router.push(`/dashboard/proyectos/${clienteId}/planos/${p.id}`)} />
                     ))
                   )}
                 </tbody>
@@ -449,7 +449,8 @@ function CeldaSemTotales({ mapa, horizontal = false }) {
   );
 }
 
-function FilaProyecto({ proyecto }) {
+function FilaProyecto({ proyecto, onClick }) {
+  const [hov, setHov] = useState(false);
   const est = ESTATUS_PROYECTO[proyecto.estatus] || { color: "#374151", bg: "#f3f4f6", label: proyecto.estatus };
   const claves = proyecto.claves || [];
   const totalClaves = claves.length;
@@ -461,7 +462,12 @@ function FilaProyecto({ proyecto }) {
   }
 
   return (
-    <tr style={{ borderBottom: "1px solid #f3f4f6" }}>
+    <tr
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{ background: hov ? "#f9fafb" : "#ffffff", cursor: onClick ? "pointer" : "default", transition: "background 0.1s", borderBottom: "1px solid #f3f4f6" }}
+    >
       <td style={{ ...sTd, paddingLeft: 20 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "#212121" }}>{proyecto.nombre}</div>
         <div style={{ marginTop: 4 }}>
@@ -500,7 +506,7 @@ function FilaProyecto({ proyecto }) {
   );
 }
 
-function CardProyecto({ proyecto }) {
+function CardProyecto({ proyecto, onClick }) {
   const est = ESTATUS_PROYECTO[proyecto.estatus] || { color: "#374151", bg: "#f3f4f6", label: proyecto.estatus };
   const claves = proyecto.claves || [];
   const totalClaves = claves.length;
@@ -521,12 +527,14 @@ function CardProyecto({ proyecto }) {
 
   return (
     <div
+      onClick={onClick}
       style={{
         background: "#ffffff",
         border: "1px solid #e5e5e5",
         borderRadius: 12,
         padding: 16,
         marginBottom: 8,
+        cursor: onClick ? "pointer" : "default",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>

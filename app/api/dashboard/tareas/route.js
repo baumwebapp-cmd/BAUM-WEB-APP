@@ -6,7 +6,6 @@ import { NextResponse } from "next/server";
 const ESTATUS_POR_ROL = {
   DISENADOR:  ["BORRADOR", "RECHAZADO"],
   COSTOS:     ["AUTORIZADO"],
-  PRODUCCION: ["LIBERADO"],
 };
 
 export async function GET() {
@@ -34,6 +33,7 @@ export async function GET() {
           select: {
             id: true,
             nombre: true,
+            clienteId: true,
             cliente: { select: { nombre: true, nombreCorto: true } },
           },
         },

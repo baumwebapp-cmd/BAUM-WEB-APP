@@ -36,12 +36,6 @@ async function main() {
     create: { nombre: "Miguel Torres", email: "costos@baum.mx", password: passwordHash, rol: "COSTOS" },
   });
 
-  await prisma.usuario.upsert({
-    where: { email: "produccion@baum.mx" },
-    update: {},
-    create: { nombre: "Roberto Sanchez", email: "produccion@baum.mx", password: passwordHash, rol: "PRODUCCION" },
-  });
-
   console.log("Usuarios listos");
 
   await prisma.modulo.upsert({
@@ -259,7 +253,6 @@ async function main() {
   console.log("gerente@baum.mx    -> GERENTE  (baum2024!)");
   console.log("disenador@baum.mx  -> DISENADOR (baum2024!)");
   console.log("costos@baum.mx     -> COSTOS   (baum2024!)");
-  console.log("produccion@baum.mx -> PRODUCCION (baum2024!)");
 }
 
 main()

@@ -6,7 +6,6 @@ import { NextResponse } from "next/server";
 const FILTRO_POR_ROL = {
   DISENADOR:  { claves: { some: { estatus: { in: ["BORRADOR", "REVISION_INTERNA"] } } } },
   COSTOS:     { claves: { some: { estatus: "AUTORIZADO" } } },
-  PRODUCCION: { claves: { some: { estatus: { in: ["LIBERADO", "EN_PRODUCCION"] } } } },
 };
 
 export async function GET() {
@@ -68,6 +67,7 @@ export async function GET() {
 
       return {
         id: p.id,
+        clienteId: p.clienteId,
         nombre: p.nombre,
         clienteNombre: p.cliente?.nombre || p.cliente?.nombreCorto || "Sin cliente",
         estatus: p.estatus,

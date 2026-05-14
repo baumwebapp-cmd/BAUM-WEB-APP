@@ -211,7 +211,6 @@ enum Rol {
   GERENTE
   DISENADOR
   COSTOS
-  PRODUCCION
 }
 
 enum NivelPermiso {

@@ -13,10 +13,6 @@ const TRANSICIONES_VALIDAS = {
     EN_PRODUCCION: ["COMPLETADO", "LIBERADO"],
     COMPLETADO: [],
   },
-  PRODUCCION: {
-    LIBERADO: ["EN_PRODUCCION"],
-    EN_PRODUCCION: ["COMPLETADO"],
-  },
 };
 
 export async function PATCH(req, { params }) {
@@ -24,7 +20,7 @@ export async function PATCH(req, { params }) {
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { rol } = sesion.user;
-  if (rol !== "GERENTE" && rol !== "PRODUCCION") {
+  if (rol !== "GERENTE") {
     return NextResponse.json({ error: "Sin permiso para cambiar el estatus de la clave" }, { status: 403 });
   }
 

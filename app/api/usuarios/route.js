@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
-const ROLES_VALIDOS_TODOS = ["DUENO", "SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
-const ROLES_GESTIONABLES_POR_SUPERADMIN = ["GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+const ROLES_VALIDOS_TODOS = ["DUENO", "SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS"];
+const ROLES_GESTIONABLES_POR_SUPERADMIN = ["GERENTE", "DISENADOR", "COSTOS"];
 
 const SELECT_USUARIO = {
   id: true,

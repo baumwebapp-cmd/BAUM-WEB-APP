@@ -1,86 +1,73 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import {
-  FolderOpen, Package, AlertCircle, CheckCircle,
-  Upload, X, ChevronRight, Clock, RefreshCw,
-} from "lucide-react";
+import { Search, ChevronRight, AlertTriangle, AlertCircle } from "lucide-react";
 
-/* ── Helpers ── */
+const ROLES_GLOBAL = ["DUENO", "SUPERADMIN", "GERENTE"];
+const POR_PAGINA = 10;
 
-function tiempoRelativo(fecha) {
-  const diff = Date.now() - new Date(fecha).getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 2) return "ahora mismo";
-  if (min < 60) return `hace ${min} min`;
-  const hrs = Math.floor(min / 60);
-  if (hrs < 24) return `hace ${hrs} h`;
-  const dias = Math.floor(hrs / 24);
-  return `hace ${dias} día${dias !== 1 ? "s" : ""}`;
+const ESTATUS_PROYECTO = {
+  ACTIVO:     { color: "#166534", bg: "#dcfce7", label: "Activo" },
+  PAUSADO:    { color: "#854d0e", bg: "#fef9c3", label: "Pausado" },
+  COMPLETADO: { color: "#374151", bg: "#f3f4f6", label: "Completado" },
+};
+
+const PENDIENTES_LABEL = {
+  BORRADOR:  { texto: "Sin plano",   bg: "#f3f4f6", color: "#6b7280" },
+  RECHAZADO: { texto: "Rechazado",   bg: "#fee2e2", color: "#991b1b" },
+  AUTORIZADO:{ texto: "Pendiente de liberar", bg: "#fef3c7", color: "#92400e" },
+};
+
+function colorClave(updatedAt) {
+  const horas = (Date.now() - new Date(updatedAt)) / 3600000;
+  if (horas < 24) return "#10b981";
+  if (horas < 48) return "#f59e0b";
+  return "#ef4444";
+}
+
+function agruparPorColor(claves) {
+  const mapa = {};
+  for (const c of claves) {
+    const color = colorClave(c.updatedAt);
+    mapa[color] = (mapa[color] || 0) + 1;
+  }
+  return mapa;
+}
+
+function colorAvatar(letra) {
+  const c = (letra || "A").toUpperCase().charCodeAt(0);
+  if (c >= 65 && c <= 68) return "#3b82f6";
+  if (c >= 69 && c <= 72) return "#8b5cf6";
+  if (c >= 73 && c <= 76) return "#10b981";
+  if (c >= 77 && c <= 80) return "#f59e0b";
+  if (c >= 81 && c <= 84) return "#ef4444";
+  return "#c9a84c";
 }
 
 function iniciales(nombre) {
-  return nombre
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0] || "")
-    .join("")
-    .toUpperCase();
+  const palabras = (nombre || "").trim().split(/\s+/);
+  return palabras.slice(0, 2).map((w) => w[0] || "").join("").toUpperCase() || "?";
 }
 
-const TIPO_EVENTO = {
-  PLANO_SUBIDO:          { Icono: Upload,      color: "#3b82f6", label: "Plano subido" },
-  AUTH_INTERNA_APROBADA: { Icono: CheckCircle, color: "#10b981", label: "Autorizado" },
-  AUTH_INTERNA_RECHAZADA:{ Icono: X,           color: "#ef4444", label: "Rechazado" },
-  CLIENTE_APROBO:        { Icono: CheckCircle, color: "#10b981", label: "Cliente aprobó" },
-  CLIENTE_RECHAZO:       { Icono: X,           color: "#ef4444", label: "Cliente rechazó" },
-};
+function contarPorStatus(claves) {
+  const conteo = {};
+  for (const c of claves) conteo[c.estatus] = (conteo[c.estatus] || 0) + 1;
+  return conteo;
+}
 
-const ESTATUS_CLAVE_LABEL = {
-  BORRADOR:         { label: "Sin plano",              color: "#6b7280", bg: "#f3f4f6" },
-  RECHAZADO:        { label: "Rechazado — corregir",   color: "#991b1b", bg: "#fee2e2" },
-  AUTORIZADO:       { label: "Pendiente de liberar",   color: "#92400e", bg: "#fef3c7" },
-  LIBERADO:         { label: "Listo para producción",  color: "#155e75", bg: "#cffafe" },
-};
+function diasDesde(fecha) {
+  if (!fecha) return 0;
+  return Math.floor((Date.now() - new Date(fecha).getTime()) / 86400000);
+}
 
-const TITULO_POR_ROL = {
-  DISENADOR:  "Planos pendientes de subir o corregir",
-  COSTOS:     "Planos pendientes de liberar",
-  PRODUCCION: "Planos listos para producción",
-};
-
-/* ── Componente principal ── */
-
-export default function DashboardPage() {
-  const { data: sesion } = useSession();
-  const router = useRouter();
+export default function InicioPage() {
+  const { data: sesion, status: sesionStatus } = useSession();
   const rol = sesion?.user?.rol;
+  const [tab, setTab] = useState("planos");
 
-  const [datos, setDatos] = useState(null);
-  const [cargando, setCargando] = useState(true);
-
-  const cargar = useCallback(async () => {
-    if (!rol) return;
-    setCargando(true);
-    try {
-      const url = rol === "GERENTE" ? "/api/dashboard/resumen" : "/api/dashboard/tareas";
-      const res = await fetch(url);
-      if (res.ok) setDatos(await res.json());
-    } finally {
-      setCargando(false);
-    }
-  }, [rol]);
-
-  useEffect(() => { cargar(); }, [cargar]);
-
-  useEffect(() => {
-    const intervalo = setInterval(cargar, 300000);
-    return () => clearInterval(intervalo);
-  }, [cargar]);
-
-  if (!rol || cargando) {
+  if (sesionStatus === "loading" || !rol) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 300 }}>
         <div className="spinner" />
@@ -88,248 +75,703 @@ export default function DashboardPage() {
     );
   }
 
-  if (rol === "GERENTE") {
-    return <PanelGerente datos={datos} onRefresh={cargar} router={router} />;
+  return (
+    <div>
+      <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#212121" }}>Inicio</h1>
+
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #e5e5e5", margin: "18px 0 24px" }}>
+        <TabBoton activo={tab === "planos"} onClick={() => setTab("planos")}>Planos</TabBoton>
+      </div>
+
+      {tab === "planos" && (
+        ROLES_GLOBAL.includes(rol)
+          ? <CentroControlGlobal />
+          : rol === "DISENADOR" || rol === "COSTOS"
+            ? <Pendientes rol={rol} />
+            : <Vacio mensaje="Sin contenido disponible para tu rol." />
+      )}
+    </div>
+  );
+}
+
+function TabBoton({ activo, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "12px 20px",
+        fontSize: 14,
+        fontWeight: activo ? 600 : 400,
+        color: activo ? "#c9a84c" : "#6b7280",
+        background: "transparent",
+        border: "none",
+        borderBottom: activo ? "2px solid #c9a84c" : "2px solid transparent",
+        marginBottom: -1,
+        cursor: "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Vacio({ mensaje }) {
+  return (
+    <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "48px 24px", textAlign: "center", color: "#6b7280", fontSize: 14 }}>
+      {mensaje}
+    </div>
+  );
+}
+
+function CentroControlGlobal() {
+  const router = useRouter();
+  const [proyectos, setProyectos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [orden, setOrden] = useState("antiguo");
+  const [filtroEstatus, setFiltroEstatus] = useState("TODOS");
+  const [pagina, setPagina] = useState(1);
+  const [esMobil, setEsMobil] = useState(false);
+
+  useEffect(() => {
+    function actualizar() { setEsMobil(window.innerWidth < 768); }
+    actualizar();
+    window.addEventListener("resize", actualizar);
+    return () => window.removeEventListener("resize", actualizar);
+  }, []);
+
+  const cargar = useCallback(async () => {
+    setError("");
+    try {
+      const res = await fetch("/api/proyectos");
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "Error al cargar datos");
+        return;
+      }
+      setProyectos(await res.json());
+    } catch {
+      setError("Error de conexión");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  useEffect(() => {
+    const intervalo = setInterval(cargar, 30000);
+    return () => clearInterval(intervalo);
+  }, [cargar]);
+
+  const proyectosConConteo = useMemo(() =>
+    proyectos.map((p) => ({ ...p, conteo: contarPorStatus(p.claves || []) })),
+  [proyectos]);
+
+  const metricas = useMemo(() => {
+    let totalClaves = 0, pendJefe = 0, pendCliente = 0, liberacion = 0, autorizados = 0;
+    for (const p of proyectosConConteo) {
+      const c = p.conteo;
+      totalClaves += (p.claves || []).length;
+      pendJefe    += c["REVISION_INTERNA"] || 0;
+      pendCliente += c["ENVIADO"] || 0;
+      liberacion  += c["AUTORIZADO"] || 0;
+      autorizados += (c["LIBERADO"] || 0) + (c["EN_PRODUCCION"] || 0);
+    }
+    return { totalClaves, pendJefe, pendCliente, liberacion, autorizados };
+  }, [proyectosConConteo]);
+
+  const filtrados = useMemo(() => {
+    const termino = busqueda.toLowerCase();
+    let lista = termino
+      ? proyectosConConteo.filter((p) => {
+          const cliNombre = (p.cliente?.nombre || "").toLowerCase();
+          const cliCorto = (p.cliente?.nombreCorto || "").toLowerCase();
+          return (
+            p.nombre.toLowerCase().includes(termino) ||
+            cliNombre.includes(termino) ||
+            cliCorto.includes(termino)
+          );
+        })
+      : proyectosConConteo;
+
+    if (filtroEstatus !== "TODOS") lista = lista.filter((p) => p.estatus === filtroEstatus);
+
+    return [...lista].sort((a, b) => {
+      if (orden === "antiguo")  return new Date(a.createdAt) - new Date(b.createdAt);
+      if (orden === "reciente") return new Date(b.createdAt) - new Date(a.createdAt);
+      if (orden === "nombre")   return a.nombre.localeCompare(b.nombre, "es");
+      return 0;
+    });
+  }, [proyectosConConteo, busqueda, orden, filtroEstatus]);
+
+  useEffect(() => { setPagina(1); }, [busqueda, orden, filtroEstatus]);
+
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
+  const paginados = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+
+  const totalesTabla = useMemo(() => {
+    let claves = 0, pendJefe = 0, pendCliente = 0, costos = 0, produccion = 0;
+    for (const p of filtrados) {
+      claves      += (p.claves || []).length;
+      pendJefe    += p.conteo["REVISION_INTERNA"] || 0;
+      pendCliente += p.conteo["ENVIADO"] || 0;
+      costos      += p.conteo["AUTORIZADO"] || 0;
+      produccion  += (p.conteo["LIBERADO"] || 0) + (p.conteo["EN_PRODUCCION"] || 0);
+    }
+    return { claves, pendJefe, pendCliente, costos, produccion };
+  }, [filtrados]);
+
+  const totalesSemaforo = useMemo(() => {
+    const cols = { pendJefe: {}, pendCliente: {}, costos: {}, produccion: {} };
+    for (const p of filtrados) {
+      for (const c of (p.claves || [])) {
+        const color = colorClave(c.updatedAt);
+        if (c.estatus === "REVISION_INTERNA") cols.pendJefe[color]    = (cols.pendJefe[color]    || 0) + 1;
+        if (c.estatus === "ENVIADO")           cols.pendCliente[color] = (cols.pendCliente[color] || 0) + 1;
+        if (c.estatus === "AUTORIZADO")        cols.costos[color]      = (cols.costos[color]      || 0) + 1;
+        if (c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION")
+          cols.produccion[color] = (cols.produccion[color] || 0) + 1;
+      }
+    }
+    return cols;
+  }, [filtrados]);
+
+  if (cargando && proyectos.length === 0) {
+    return <div style={{ display: "flex", justifyContent: "center", padding: 48 }}><div className="spinner" /></div>;
   }
 
-  return <PanelTareas rol={rol} tareas={datos || []} onRefresh={cargar} router={router} />;
-}
-
-/* ── Vista GERENTE ── */
-
-function PanelGerente({ datos, onRefresh, router }) {
-  if (!datos) return null;
-  const { metricas, proyectos, actividadReciente } = datos;
+  const METRICAS_CONFIG = [
+    { label: "TOTALES",       valor: metricas.totalClaves, color: "#c9a84c" },
+    { label: "PEND. JEFE",    valor: metricas.pendJefe,    color: "#ef4444" },
+    { label: "PEND. CLIENTE", valor: metricas.pendCliente, color: "#f59e0b" },
+    { label: "LIBERACIÓN",    valor: metricas.liberacion,  color: "#3b82f6" },
+    { label: "AUTORIZADOS",   valor: metricas.autorizados, color: "#10b981" },
+  ];
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-      {/* Encabezado */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#212121" }}>Dashboard ejecutivo</h1>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#888888" }}>Vista general del sistema BAUM</p>
-        </div>
-        <button
-          onClick={onRefresh}
-          style={{ display: "flex", alignItems: "center", gap: 6, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "7px 14px", fontSize: 13, color: "#555555", cursor: "pointer" }}
-        >
-          <RefreshCw size={13} /> Actualizar
-        </button>
+    <div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
+        {METRICAS_CONFIG.map(({ label, valor, color }) => (
+          <div
+            key={label}
+            style={{
+              background: "#ffffff",
+              border: "1px solid #e5e5e5",
+              borderRadius: 12,
+              padding: "16px 20px 20px",
+              minWidth: 130,
+              flex: "1 1 130px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: "#212121", lineHeight: 1 }}>{valor}</div>
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 4, background: color, borderRadius: "0 0 2px 2px" }} />
+          </div>
+        ))}
       </div>
 
-      {/* Sección 1 — Métricas */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
-        <TarjetaMetrica
-          label="Proyectos activos"
-          valor={metricas.proyectosActivos}
-          Icono={FolderOpen}
-          color="#c9a84c"
-        />
-        <TarjetaMetrica
-          label="En producción hoy"
-          valor={metricas.enProduccion}
-          Icono={Package}
-          color="#10b981"
-        />
-        <TarjetaMetrica
-          label="Pendientes de acción"
-          valor={metricas.pendientesAccion}
-          Icono={AlertCircle}
-          color="#f59e0b"
-        />
-        <TarjetaMetrica
-          label="Completadas este mes"
-          valor={metricas.completadasEsteMes}
-          Icono={CheckCircle}
-          color="#10b981"
-        />
-      </div>
-
-      {/* Secciones 2 y 3 en dos columnas */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 16, alignItems: "start" }}>
-        {/* Sección 2 — Proyectos */}
-        <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f0f0f0" }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#212121" }}>Estado de proyectos</p>
-            <p style={{ margin: "2px 0 0", fontSize: 11, color: "#aaaaaa" }}>ordenados por urgencia</p>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ position: "relative", flex: "1 1 200px", minWidth: 180 }}>
+            <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af", pointerEvents: "none" }} />
+            <input
+              type="text"
+              placeholder="Buscar cliente o proyecto..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              style={{ width: "100%", padding: "10px 14px 10px 36px", border: "1px solid #e5e5e5", borderRadius: 8, fontSize: 13, color: "#212121", background: "#ffffff", outline: "none", boxSizing: "border-box" }}
+            />
           </div>
-          {proyectos.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "#aaaaaa", fontSize: 13 }}>Sin proyectos activos</div>
-          ) : (
-            proyectos.map((p) => <FilaProyecto key={p.id} proyecto={p} router={router} />)
-          )}
+          <select value={filtroEstatus} onChange={(e) => setFiltroEstatus(e.target.value)} style={sSelect}>
+            <option value="TODOS">Todos</option>
+            <option value="ACTIVO">Activos</option>
+            <option value="PAUSADO">Pausados</option>
+            <option value="COMPLETADO">Completados</option>
+          </select>
+          <select value={orden} onChange={(e) => setOrden(e.target.value)} style={sSelect}>
+            <option value="antiguo">Más antiguo primero</option>
+            <option value="reciente">Más reciente</option>
+            <option value="nombre">Nombre A-Z</option>
+          </select>
         </div>
 
-        {/* Sección 3 — Actividad reciente */}
-        <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f0f0f0" }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#212121" }}>Actividad reciente</p>
-          </div>
-          {actividadReciente.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "#aaaaaa", fontSize: 13 }}>Sin actividad registrada</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, color: "#6b7280" }}>Estado de atención:</span>
+          {[
+            { color: "#10b981", label: "Activo (< 24h)" },
+            { color: "#f59e0b", label: "Alerta (< 48h)" },
+            { color: "#ef4444", label: "Crítico (> 48h)" },
+          ].map(({ color, label }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, display: "inline-block" }} />
+              <span style={{ fontSize: 12, color: "#6b7280" }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {error ? (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: 48, gap: 12 }}>
+          <AlertCircle size={32} style={{ color: "#ef4444" }} />
+          <p style={{ margin: 0, color: "#6b7280" }}>{error}</p>
+          <button onClick={() => { setCargando(true); cargar(); }} style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 600, cursor: "pointer", color: "#212121" }}>
+            Reintentar
+          </button>
+        </div>
+      ) : esMobil ? (
+        <>
+          {paginados.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 14 }}>
+              {proyectos.length === 0 ? "No hay proyectos registrados." : "No hay proyectos que coincidan con la búsqueda."}
+            </div>
           ) : (
-            <div style={{ padding: "8px 0" }}>
-              {actividadReciente.map((ev, i) => <EventoActividad key={i} evento={ev} />)}
+            <div>
+              {paginados.map((p) => (
+                <CardProyecto
+                  key={p.id}
+                  proyecto={p}
+                  onClick={() => router.push(`/dashboard/proyectos/${p.clienteId}/planos/${p.id}`)}
+                />
+              ))}
             </div>
           )}
-        </div>
-      </div>
+          {filtrados.length > 0 && <Paginador filtrados={filtrados} pagina={pagina} totalPaginas={totalPaginas} onCambio={setPagina} compact />}
+        </>
+      ) : (
+        <>
+          <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#ffffff", borderBottom: "1px solid #e5e5e5" }}>
+                    <th style={{ ...sTh, minWidth: 180 }}>CLIENTE</th>
+                    <th style={{ ...sTh, minWidth: 200 }}>PROYECTO</th>
+                    <th style={{ ...sTh, minWidth: 80,  textAlign: "center" }}>CLAVES</th>
+                    <th style={{ ...sTh, minWidth: 100, textAlign: "center" }}>PEND. JEFE</th>
+                    <th style={{ ...sTh, minWidth: 115, textAlign: "center" }}>PEND. CLIENTE</th>
+                    <th style={{ ...sTh, minWidth: 80,  textAlign: "center" }}>COSTOS</th>
+                    <th style={{ ...sTh, minWidth: 105, textAlign: "center" }}>PRODUCCIÓN</th>
+                    <th style={{ ...sTh, minWidth: 150 }}>PROGRESO</th>
+                  </tr>
+                  <tr style={{ background: "#f9fafb", borderBottom: "2px solid #e5e5e5" }}>
+                    <td style={{ ...sTotalesCell, paddingLeft: 20 }} colSpan={2}>
+                      TOTALES · {filtrados.length} proyecto{filtrados.length !== 1 ? "s" : ""}
+                    </td>
+                    <td style={{ ...sTotalesCell, textAlign: "center" }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: totalesTabla.claves > 0 ? "#212121" : "#d1d5db" }}>
+                        {totalesTabla.claves || "—"}
+                      </span>
+                    </td>
+                    {(["pendJefe", "pendCliente", "costos"]).map((col) => (
+                      <td key={col} style={{ ...sTotalesCell, textAlign: "center" }}>
+                        <CeldaSemTotales mapa={totalesSemaforo[col]} horizontal />
+                      </td>
+                    ))}
+                    <td style={{ ...sTotalesCell, textAlign: "center" }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: totalesTabla.produccion > 0 ? "#10b981" : "#d1d5db" }}>
+                        {totalesTabla.produccion || "—"}
+                      </span>
+                    </td>
+                    <td style={sTotalesCell} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginados.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 14 }}>
+                        {proyectos.length === 0 ? "No hay proyectos registrados." : "No hay proyectos que coincidan con la búsqueda."}
+                      </td>
+                    </tr>
+                  ) : (
+                    paginados.map((p) => (
+                      <FilaProyecto
+                        key={p.id}
+                        proyecto={p}
+                        onClick={() => router.push(`/dashboard/proyectos/${p.clienteId}/planos/${p.id}`)}
+                      />
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {filtrados.length > 0 && <Paginador filtrados={filtrados} pagina={pagina} totalPaginas={totalPaginas} onCambio={setPagina} />}
+        </>
+      )}
     </div>
   );
 }
 
-function TarjetaMetrica({ label, valor, Icono, color }) {
+function Paginador({ filtrados, pagina, totalPaginas, onCambio, compact = false }) {
+  const desde = Math.min((pagina - 1) * POR_PAGINA + 1, filtrados.length);
+  const hasta = Math.min(pagina * POR_PAGINA, filtrados.length);
   return (
-    <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "20px 22px" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-        <div>
-          <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#aaaaaa", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            {label}
-          </p>
-          <p style={{ margin: 0, fontSize: 34, fontWeight: 500, color: "#212121", lineHeight: 1 }}>{valor}</p>
-        </div>
-        <div style={{ width: 40, height: 40, borderRadius: 10, background: `${color}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Icono size={20} style={{ color }} />
-        </div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: compact ? 8 : 16, flexWrap: "wrap", gap: 8 }}>
+      <span style={{ fontSize: compact ? 12 : 13, color: "#6b7280" }}>
+        {compact ? `${desde}–${hasta} de ${filtrados.length}` : `Mostrando ${desde}–${hasta} de ${filtrados.length} proyectos totales`}
+      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <BtnPag onClick={() => onCambio(Math.max(1, pagina - 1))} disabled={pagina === 1}>‹</BtnPag>
+        {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+          .filter((n) => n === 1 || n === totalPaginas || Math.abs(n - pagina) <= 1)
+          .reduce((acc, n, idx, arr) => {
+            if (idx > 0 && n - arr[idx - 1] > 1) acc.push("...");
+            acc.push(n);
+            return acc;
+          }, [])
+          .map((item, i) =>
+            item === "..." ? (
+              <span key={`em-${i}`} style={{ padding: "0 4px", color: "#9ca3af", fontSize: 13 }}>…</span>
+            ) : (
+              <BtnPag key={item} onClick={() => onCambio(item)} activo={pagina === item}>{item}</BtnPag>
+            )
+          )}
+        <BtnPag onClick={() => onCambio(Math.min(totalPaginas, pagina + 1))} disabled={pagina === totalPaginas}>›</BtnPag>
       </div>
     </div>
   );
 }
 
-const COLOR_SEMAFORO = { rojo: "#ef4444", amarillo: "#f59e0b", verde: "#10b981" };
+function BtnPag({ onClick, disabled, activo, children }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        minWidth: 32,
+        height: 32,
+        borderRadius: 6,
+        border: activo ? "1.5px solid #c9a84c" : "1px solid #e5e5e5",
+        background: activo ? "#c9a84c" : "#ffffff",
+        color: activo ? "#212121" : disabled ? "#d1d5db" : "#212121",
+        fontWeight: activo ? 700 : 400,
+        fontSize: 13,
+        cursor: disabled ? "not-allowed" : "pointer",
+        padding: "0 6px",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
-function FilaProyecto({ proyecto, router }) {
-  const { id, nombre, clienteNombre, total, completadas, semaforo, etapa } = proyecto;
-  const pct = total > 0 ? Math.round((completadas / total) * 100) : 0;
+const ORDEN_SEM = ["#10b981", "#f59e0b", "#ef4444"];
+
+function CeldaSemTotales({ mapa, horizontal = false }) {
+  const entradas = ORDEN_SEM.map((color) => [color, mapa?.[color] || 0]).filter(([, n]) => n > 0);
+  if (entradas.length === 0) return <span style={{ color: "#d1d5db", fontSize: 14 }}>—</span>;
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: horizontal ? "row" : "column",
+      gap: horizontal ? 6 : 2,
+      alignItems: horizontal ? "center" : "flex-start",
+      justifyContent: horizontal ? "center" : undefined,
+    }}>
+      {entradas.map(([color, n]) => (
+        <div key={color} style={{ display: "flex", alignItems: "center" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#212121" }}>{String(n).padStart(2, "0")}</span>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0, marginLeft: 4 }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FilaProyecto({ proyecto, onClick }) {
+  const [hov, setHov] = useState(false);
+  const est = ESTATUS_PROYECTO[proyecto.estatus] || { color: "#374151", bg: "#f3f4f6", label: proyecto.estatus };
+  const claves = proyecto.claves || [];
+  const totalClaves = claves.length;
+  const completadas = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
+  const porcentaje = totalClaves > 0 ? Math.round((completadas / totalClaves) * 100) : 0;
+
+  const clienteDisplay = proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente";
+  const ini = iniciales(clienteDisplay);
+  const bgAvatar = colorAvatar(ini[0]);
+
+  function mapaCol(...estatuses) {
+    return agruparPorColor(claves.filter((c) => estatuses.includes(c.estatus)));
+  }
+
+  return (
+    <tr
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{ background: hov ? "#f9fafb" : "#ffffff", cursor: "pointer", transition: "background 0.1s", borderBottom: "1px solid #f3f4f6" }}
+    >
+      <td style={{ ...sTd, paddingLeft: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: bgAvatar, color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 600 }}>
+            {ini}
+          </div>
+          <span style={{ fontSize: 13, color: "#212121", fontWeight: 500 }}>{clienteDisplay}</span>
+        </div>
+      </td>
+      <td style={sTd}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#212121" }}>{proyecto.nombre}</div>
+        <div style={{ marginTop: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: est.bg, color: est.color }}>
+            {est.label}
+          </span>
+        </div>
+      </td>
+      <td style={{ ...sTd, textAlign: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: totalClaves > 0 ? "#212121" : "#d1d5db" }}>{totalClaves || "—"}</span>
+      </td>
+      <td style={{ ...sTd, textAlign: "center" }}><CeldaSemTotales mapa={mapaCol("REVISION_INTERNA")} /></td>
+      <td style={{ ...sTd, textAlign: "center" }}><CeldaSemTotales mapa={mapaCol("ENVIADO")} /></td>
+      <td style={{ ...sTd, textAlign: "center" }}><CeldaSemTotales mapa={mapaCol("AUTORIZADO")} /></td>
+      <td style={{ ...sTd, textAlign: "center" }}>
+        {(() => {
+          const n = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
+          return <span style={{ fontSize: 13, fontWeight: 700, color: n > 0 ? "#10b981" : "#d1d5db" }}>{n || "—"}</span>;
+        })()}
+      </td>
+      <td style={{ ...sTd, minWidth: 150 }}>
+        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>{porcentaje}% Completado</div>
+        <div style={{ height: 6, borderRadius: 3, background: "#f3f4f6", overflow: "hidden" }}>
+          <div style={{ height: "100%", borderRadius: 3, background: "#c9a84c", width: `${porcentaje}%`, transition: "width 0.3s ease" }} />
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function CardProyecto({ proyecto, onClick }) {
+  const est = ESTATUS_PROYECTO[proyecto.estatus] || { color: "#374151", bg: "#f3f4f6", label: proyecto.estatus };
+  const claves = proyecto.claves || [];
+  const totalClaves = claves.length;
+  const completadas = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
+  const porcentaje = totalClaves > 0 ? Math.round((completadas / totalClaves) * 100) : 0;
+
+  const clienteDisplay = proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente";
+  const ini = iniciales(clienteDisplay);
+  const bgAvatar = colorAvatar(ini[0]);
+
+  function mapaCol(...estatuses) {
+    return agruparPorColor(claves.filter((c) => estatuses.includes(c.estatus)));
+  }
+
+  const totalProduccion = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
+  const INDICADORES = [
+    { label: "PEND. JEFE",    mapa: mapaCol("REVISION_INTERNA") },
+    { label: "PEND. CLIENTE", mapa: mapaCol("ENVIADO") },
+    { label: "COSTOS",        mapa: mapaCol("AUTORIZADO") },
+    { label: "PRODUCCIÓN",    tipo: "numero", valor: totalProduccion },
+  ];
 
   return (
     <div
-      onClick={() => router.push(`/dashboard/proyectos/${id}`)}
-      style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", borderBottom: "1px solid #f5f5f5", cursor: "pointer", transition: "background 0.15s" }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "#fafafa")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      onClick={onClick}
+      style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: 16, marginBottom: 8, cursor: "pointer" }}
     >
-      {/* Semáforo */}
-      <span style={{ width: 10, height: 10, borderRadius: "50%", background: COLOR_SEMAFORO[semaforo], flexShrink: 0, display: "block" }} />
-
-      {/* Info */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#212121", whiteSpace: "nowrap" }}>{nombre}</span>
-          <span style={{ fontSize: 11, color: "#aaaaaa", whiteSpace: "nowrap" }}>{clienteNombre}</span>
-        </div>
-
-        {/* Barra de progreso */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-          <div style={{ flex: 1, background: "#f0f0f0", borderRadius: 4, height: 6 }}>
-            <div style={{ background: "#c9a84c", height: 6, borderRadius: 4, width: `${pct}%`, transition: "width 0.4s" }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: bgAvatar, color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 600 }}>
+            {ini}
           </div>
-          <span style={{ fontSize: 10, color: "#aaaaaa", whiteSpace: "nowrap" }}>{completadas}/{total}</span>
+          <span style={{ fontSize: 13, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {clienteDisplay}
+          </span>
         </div>
-
-        <span style={{ fontSize: 11, color: "#888888", marginTop: 3, display: "block" }}>{etapa}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: est.bg, color: est.color, flexShrink: 0, marginLeft: 8 }}>
+          {est.label}
+        </span>
       </div>
 
-      <ChevronRight size={14} style={{ color: "#cccccc", flexShrink: 0 }} />
+      <div style={{ fontSize: 16, fontWeight: 600, color: "#212121", marginBottom: 12, wordBreak: "break-word" }}>
+        {proyecto.nombre}
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>{porcentaje}% Completado</div>
+        <div style={{ height: 6, borderRadius: 3, background: "#f3f4f6", overflow: "hidden" }}>
+          <div style={{ height: "100%", borderRadius: 3, background: "#c9a84c", width: `${porcentaje}%`, transition: "width 0.3s ease" }} />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        {INDICADORES.map(({ label, mapa, tipo, valor }) => (
+          <div key={label} style={{ background: "#f9fafb", borderRadius: 8, padding: "8px 10px" }}>
+            <div style={{ fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{label}</div>
+            {tipo === "numero" ? (
+              <span style={{ fontSize: 13, fontWeight: 700, color: valor > 0 ? "#10b981" : "#d1d5db" }}>{valor || "—"}</span>
+            ) : (
+              <CeldaSemTotales mapa={mapa} />
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function EventoActividad({ evento }) {
-  const conf = TIPO_EVENTO[evento.tipo] || { Icono: Clock, color: "#888888" };
-  const { Icono, color } = conf;
+function Pendientes({ rol }) {
+  const router = useRouter();
+  const [pendientes, setPendientes] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
 
-  return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 16px", borderBottom: "1px solid #f5f5f5" }}>
-      {/* Avatar */}
-      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#212121", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: "#c9a84c" }}>{iniciales(evento.responsable)}</span>
-      </div>
+  const cargar = useCallback(async () => {
+    setError("");
+    try {
+      const res = await fetch("/api/dashboard/pendientes");
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "Error al cargar pendientes");
+        return;
+      }
+      setPendientes(await res.json());
+    } catch {
+      setError("Error de conexión");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
 
-      {/* Texto */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 12, color: "#212121", lineHeight: 1.45 }}>{evento.descripcion}</p>
-        <p style={{ margin: "3px 0 0", fontSize: 11, color: "#aaaaaa" }}>{evento.proyecto}</p>
-      </div>
+  useEffect(() => { cargar(); }, [cargar]);
 
-      {/* Icono tipo + tiempo */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-        <Icono size={13} style={{ color }} />
-        <span style={{ fontSize: 10, color: "#cccccc", whiteSpace: "nowrap" }}>{tiempoRelativo(evento.fecha)}</span>
-      </div>
-    </div>
-  );
-}
+  const titulo = rol === "DISENADOR" ? "Mis pendientes — Planos" : "Mis pendientes — Liberaciones";
+  const vacio = rol === "DISENADOR" ? "No tienes planos pendientes 🎉" : "No tienes liberaciones pendientes 🎉";
 
-/* ── Vista otros roles ── */
+  if (cargando) {
+    return <div style={{ display: "flex", justifyContent: "center", padding: 48 }}><div className="spinner" /></div>;
+  }
 
-function PanelTareas({ rol, tareas, onRefresh, router }) {
-  const titulo = TITULO_POR_ROL[rol] || "Tareas pendientes";
-
-  return (
-    <div style={{ maxWidth: 700, margin: "0 auto" }}>
-      {/* Encabezado */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#212121" }}>{titulo}</h1>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#888888" }}>
-            {tareas.length} tarea{tareas.length !== 1 ? "s" : ""} pendiente{tareas.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <button
-          onClick={onRefresh}
-          style={{ display: "flex", alignItems: "center", gap: 6, background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "7px 14px", fontSize: 13, color: "#555555", cursor: "pointer" }}
-        >
-          <RefreshCw size={13} /> Actualizar
+  if (error) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: 48, gap: 12 }}>
+        <AlertCircle size={32} style={{ color: "#ef4444" }} />
+        <p style={{ margin: 0, color: "#6b7280" }}>{error}</p>
+        <button onClick={() => { setCargando(true); cargar(); }} style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 600, cursor: "pointer", color: "#212121" }}>
+          Reintentar
         </button>
       </div>
+    );
+  }
 
-      {tareas.length === 0 ? (
-        <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: 48, textAlign: "center" }}>
-          <CheckCircle size={36} style={{ color: "#10b981", marginBottom: 12 }} />
-          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#212121" }}>Sin tareas pendientes</p>
-          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#888888" }}>Todo está al día</p>
+  return (
+    <div>
+      <h2 style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 700, color: "#212121" }}>{titulo}</h2>
+
+      {pendientes.length === 0 ? (
+        <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "48px 24px", textAlign: "center", color: "#6b7280", fontSize: 14 }}>
+          {vacio}
         </div>
       ) : (
         <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, overflow: "hidden" }}>
-          {tareas.map((clave) => {
-            const conf = ESTATUS_CLAVE_LABEL[clave.estatus] || { label: clave.estatus, color: "#888888", bg: "#f3f4f6" };
-            return (
-              <div
-                key={clave.id}
-                style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", borderBottom: "1px solid #f5f5f5" }}
-              >
-                {/* Estatus badge */}
-                <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: conf.bg, color: conf.color, whiteSpace: "nowrap", flexShrink: 0 }}>
-                  {conf.label}
-                </span>
-
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#212121" }}>{clave.codigo}</p>
-                  <p style={{ margin: "1px 0 0", fontSize: 11, color: "#888888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {clave.descripcion}
-                  </p>
-                  <p style={{ margin: "3px 0 0", fontSize: 11, color: "#aaaaaa" }}>
-                    {clave.proyecto.nombre} · {clave.proyecto.clienteNombre}
-                  </p>
-                </div>
-
-                {/* Tiempo + botón */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
-                  <span style={{ fontSize: 10, color: "#cccccc" }}>{tiempoRelativo(clave.updatedAt)}</span>
-                  <button
-                    onClick={() => router.push(`/dashboard/proyectos/${clave.proyecto.id}`)}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#212121", border: "none", borderRadius: 6, padding: "5px 10px", color: "#c9a84c", fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
-                  >
-                    Ir al proyecto <ChevronRight size={11} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+          {pendientes.map((p) => (
+            <FilaPendiente
+              key={p.id}
+              pendiente={p}
+              rol={rol}
+              onClick={() => router.push(`/dashboard/proyectos/${p.clienteId}/planos/${p.proyectoId}`)}
+            />
+          ))}
         </div>
       )}
     </div>
   );
 }
+
+function FilaPendiente({ pendiente, rol, onClick }) {
+  const [hov, setHov] = useState(false);
+  const etiqueta = PENDIENTES_LABEL[pendiente.estatus] || { texto: pendiente.estatus, bg: "#f3f4f6", color: "#6b7280" };
+  const mostrarComentario = pendiente.estatus === "RECHAZADO" && pendiente.comentariosRechazo;
+
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "16px 20px",
+        borderBottom: "1px solid #f3f4f6",
+        background: hov ? "#fafafa" : "#ffffff",
+        transition: "background 0.1s",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#212121" }}>{pendiente.codigo}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: etiqueta.bg, color: etiqueta.color }}>
+            {etiqueta.texto}
+          </span>
+        </div>
+        <p style={{ margin: "3px 0 0", fontSize: 12, color: "#555555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {pendiente.descripcion}
+        </p>
+        <p style={{ margin: "3px 0 0", fontSize: 11, color: "#9ca3af" }}>
+          {pendiente.proyectoNombre} · {pendiente.clienteNombre}
+          {rol === "COSTOS" && pendiente.updatedAt && (
+            <> · {diasDesde(pendiente.updatedAt)}d en autorizado</>
+          )}
+        </p>
+        {mostrarComentario && (
+          <div style={{ marginTop: 8, padding: "8px 12px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <AlertTriangle size={14} style={{ color: "#dc2626", flexShrink: 0, marginTop: 2 }} />
+            <span style={{ fontSize: 12, color: "#991b1b", lineHeight: 1.4 }}>{pendiente.comentariosRechazo}</span>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={onClick}
+        style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#212121", border: "none", borderRadius: 6, padding: "6px 12px", color: "#c9a84c", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}
+      >
+        Ir al proyecto <ChevronRight size={12} />
+      </button>
+    </div>
+  );
+}
+
+const sTh = {
+  padding: "10px 16px",
+  fontWeight: 700,
+  fontSize: 10,
+  color: "#9ca3af",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  textAlign: "left",
+  background: "#ffffff",
+  whiteSpace: "nowrap",
+};
+
+const sTd = {
+  padding: "14px 16px",
+  verticalAlign: "middle",
+};
+
+const sTotalesCell = {
+  padding: "10px 16px",
+  fontSize: 11,
+  fontWeight: 700,
+  color: "#6b7280",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  background: "#f9fafb",
+  whiteSpace: "nowrap",
+};
+
+const sSelect = {
+  padding: "10px 14px",
+  border: "1px solid #e5e5e5",
+  borderRadius: 8,
+  fontSize: 13,
+  color: "#212121",
+  background: "#ffffff",
+  outline: "none",
+  cursor: "pointer",
+};
+

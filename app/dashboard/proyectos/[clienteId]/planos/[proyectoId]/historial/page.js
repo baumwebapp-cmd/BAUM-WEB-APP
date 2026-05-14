@@ -196,7 +196,8 @@ async function generarPDF(data, sesion) {
 
 /* ── Componente principal ────────────────────────────── */
 export default function HistorialPage() {
-  const { id }                            = useParams();
+  const { clienteId, proyectoId }         = useParams();
+  const id                                = proyectoId;
   const router                            = useRouter();
   const { data: sesion, status: sesionStatus } = useSession();
 
@@ -243,7 +244,7 @@ export default function HistorialPage() {
         <AlertTriangle size={36} style={{ color: "#ef4444" }} />
         <p style={{ color: "#888888", margin: 0 }}>{error || "No se pudo cargar el historial."}</p>
         <button
-          onClick={() => router.push(`/dashboard/proyectos/${id}`)}
+          onClick={() => router.push(`/dashboard/proyectos/${clienteId}/planos/${id}`)}
           style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "8px 18px", color: "#555555", fontSize: 13, cursor: "pointer" }}
         >
           Volver al proyecto
@@ -258,7 +259,7 @@ export default function HistorialPage() {
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <button
-            onClick={() => router.push(`/dashboard/proyectos/${id}`)}
+            onClick={() => router.push(`/dashboard/proyectos/${clienteId}/planos/${id}`)}
             style={{ background: "#ffffff", border: "1px solid #e5e5e5", color: "#555555", borderRadius: 8, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13, flexShrink: 0 }}
           >
             <ArrowLeft size={14} /> Volver al proyecto

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
-const ROLES_GESTIONABLES_POR_SUPERADMIN = ["GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"];
+const ROLES_GESTIONABLES_POR_SUPERADMIN = ["GERENTE", "DISENADOR", "COSTOS"];
 
 const SELECT_USUARIO = {
   id: true,
@@ -92,7 +92,7 @@ export async function PATCH(req, { params }) {
         return NextResponse.json({ error: "No se puede cambiar el rol del dueño" }, { status: 403 });
       }
       const rolesPermitidos = rolActual === "DUENO"
-        ? ["SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS", "PRODUCCION"]
+        ? ["SUPERADMIN", "GERENTE", "DISENADOR", "COSTOS"]
         : ROLES_GESTIONABLES_POR_SUPERADMIN;
       if (!rolesPermitidos.includes(rol)) {
         return NextResponse.json({ error: "Rol inválido o sin permiso para asignarlo" }, { status: 400 });
