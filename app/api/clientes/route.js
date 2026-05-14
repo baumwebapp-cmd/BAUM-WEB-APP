@@ -17,14 +17,21 @@ const SELECT_CLIENTE = {
   updatedAt: true,
 };
 
-export async function GET() {
+export async function GET(req) {
   const sesion = await getServerSession(authOptions);
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  const { searchParams } = new URL(req.url);
+  const incluirInactivos = searchParams.get("incluirInactivos") === "1";
+
   try {
     const clientes = await prisma.cliente.findMany({
-      where: { activo: true },
-      select: SELECT_CLIENTE,
+      where: incluirInactivos ? {} : { activo: true },
+      select: {
+        ...SELECT_CLIENTE,
+        proyectos: { select: { id: true } },
+        _count: { select: { proyectos: true } },
+      },
       orderBy: { nombre: "asc" },
     });
     return NextResponse.json(clientes);

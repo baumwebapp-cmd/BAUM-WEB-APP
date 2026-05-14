@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { Plus, Pencil, Power, Search, Building2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, Pencil, Power, Search, Eye, X } from "lucide-react";
 
 const VACIO_FORM = {
   nombre: "",
@@ -21,14 +22,53 @@ function rfcParcialValido(rfc) {
   return /^[A-ZÑ&]{3,4}[0-9]{0,6}[A-Z0-9]{0,3}$/.test(rfc);
 }
 
+function colorAvatar(letra) {
+  const c = (letra || "A").toUpperCase().charCodeAt(0);
+  if (c >= 65 && c <= 68) return "#3b82f6";
+  if (c >= 69 && c <= 72) return "#8b5cf6";
+  if (c >= 73 && c <= 76) return "#10b981";
+  if (c >= 77 && c <= 80) return "#f59e0b";
+  if (c >= 81 && c <= 84) return "#ef4444";
+  return "#c9a84c";
+}
+
+function calcularEstado(cliente) {
+  if (cliente.activo === false) return "INACTIVO";
+  if (cliente.proyectos && cliente.proyectos.length > 0) return "ACTIVO";
+  return "PENDIENTE";
+}
+
+function iniciales(nombre) {
+  const palabras = (nombre || "").trim().split(/\s+/);
+  return palabras.slice(0, 2).map((w) => w[0] || "").join("").toUpperCase() || "?";
+}
+
+function formatearFecha(fecha) {
+  if (!fecha) return "";
+  return new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function truncar(texto, max) {
+  if (!texto) return "—";
+  return texto.length > max ? texto.slice(0, max) + "…" : texto;
+}
+
+const ESTILO_BADGE = {
+  ACTIVO: { background: "#dcfce7", color: "#166534" },
+  PENDIENTE: { background: "#fef9c3", color: "#854d0e" },
+  INACTIVO: { background: "#f3f4f6", color: "#6b7280" },
+};
+
 export default function ClientesPage() {
   const { data: sesion } = useSession();
+  const router = useRouter();
   const rol = sesion?.user?.rol;
   const puedoGestionar = puedeGestionar(rol);
 
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("TODOS");
 
   const [modalCrear, setModalCrear] = useState(false);
   const [modalEditar, setModalEditar] = useState(null);
@@ -41,7 +81,7 @@ export default function ClientesPage() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const res = await fetch("/api/clientes");
+      const res = await fetch("/api/clientes?incluirInactivos=1");
       const data = await res.json();
       if (res.ok) setClientes(data);
     } finally {
@@ -122,7 +162,17 @@ export default function ClientesPage() {
     }
   }
 
-  const filtrados = clientes.filter((c) => {
+  const clientesConEstado = clientes.map((c) => ({ ...c, _estado: calcularEstado(c) }));
+
+  const totales = {
+    total: clientesConEstado.length,
+    activos: clientesConEstado.filter((c) => c._estado === "ACTIVO").length,
+    pendientes: clientesConEstado.filter((c) => c._estado === "PENDIENTE").length,
+    inactivos: clientesConEstado.filter((c) => c._estado === "INACTIVO").length,
+  };
+
+  const filtrados = clientesConEstado.filter((c) => {
+    if (filtroEstado !== "TODOS" && c._estado !== filtroEstado) return false;
     if (!busqueda.trim()) return true;
     const q = busqueda.toLowerCase();
     return (
@@ -137,11 +187,23 @@ export default function ClientesPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#212121" }}>Clientes</h1>
-        <p style={{ margin: "3px 0 0", fontSize: 13, color: "#6b7280" }}>
-          {filtrados.length} cliente{filtrados.length !== 1 ? "s" : ""}
-        </p>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 12, color: "#9ca3af" }}>Sistema de gestión</div>
+          <h1 style={{ margin: "2px 0 0", fontSize: 24, fontWeight: 800, color: "#212121" }}>Clientes</h1>
+        </div>
+        {puedoGestionar && (
+          <button onClick={abrirCrear} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#c9a84c", border: "none", borderRadius: 8, padding: "10px 18px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+            <Plus size={15} /> Nuevo cliente
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
+        <TarjetaStat etiqueta="Total clientes" valor={totales.total} color="#212121" />
+        <TarjetaStat etiqueta="Activos" valor={totales.activos} color="#16a34a" />
+        <TarjetaStat etiqueta="Pendientes" valor={totales.pendientes} color="#c9a84c" />
+        <TarjetaStat etiqueta="Inactivos" valor={totales.inactivos} color="#6b7280" />
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
@@ -155,82 +217,119 @@ export default function ClientesPage() {
             style={{ width: "100%", padding: "10px 14px 10px 36px", border: "1px solid #e5e5e5", borderRadius: 8, fontSize: 13, color: "#212121", background: "#ffffff", outline: "none", boxSizing: "border-box" }}
           />
         </div>
-        {puedoGestionar && (
-          <button onClick={abrirCrear} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#c9a84c", border: "none", borderRadius: 8, padding: "10px 18px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
-            <Plus size={15} /> Nuevo cliente
-          </button>
-        )}
+        <select
+          value={filtroEstado}
+          onChange={(e) => setFiltroEstado(e.target.value)}
+          style={{ padding: "10px 14px", border: "1px solid #e5e5e5", borderRadius: 8, fontSize: 13, color: "#212121", background: "#ffffff", outline: "none", cursor: "pointer", minWidth: 140 }}
+        >
+          <option value="TODOS">Todos los estados</option>
+          <option value="ACTIVO">Activo</option>
+          <option value="PENDIENTE">Pendiente</option>
+          <option value="INACTIVO">Inactivo</option>
+        </select>
       </div>
 
       <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", minWidth: 800, borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#ffffff", borderBottom: "1px solid #e5e5e5" }}>
-                <th style={sTh}>NOMBRE</th>
-                <th style={sTh}>NOMBRE CORTO</th>
+                <th style={sTh}>CLIENTE</th>
                 <th style={sTh}>RAZÓN SOCIAL</th>
                 <th style={sTh}>RFC</th>
+                <th style={sTh}>PROYECTOS</th>
                 <th style={{ ...sTh, textAlign: "center" }}>ESTADO</th>
-                {puedoGestionar && <th style={{ ...sTh, textAlign: "center", minWidth: 110 }}>ACCIONES</th>}
+                <th style={{ ...sTh, textAlign: "center", minWidth: 110 }}>ACCIONES</th>
               </tr>
             </thead>
             <tbody>
               {cargando ? (
-                <tr><td colSpan={puedoGestionar ? 6 : 5} style={{ textAlign: "center", padding: 32, color: "#9ca3af" }}>Cargando…</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: "center", padding: 32, color: "#9ca3af" }}>Cargando…</td></tr>
               ) : filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan={puedoGestionar ? 6 : 5} style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 14 }}>
+                  <td colSpan={6} style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 14 }}>
                     {clientes.length === 0
                       ? "No hay clientes registrados aún."
-                      : "No hay clientes que coincidan con la búsqueda."}
+                      : "No hay clientes que coincidan con los filtros."}
                   </td>
                 </tr>
               ) : (
-                filtrados.map((c) => (
-                  <tr key={c.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                    <td style={{ ...sTd, paddingLeft: 20 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#fffbeb", color: "#c9a84c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <Building2 size={16} />
+                filtrados.map((c) => {
+                  const ini = iniciales(c.nombre);
+                  const bgAvatar = colorAvatar(ini[0]);
+                  const numProyectos = c._count?.proyectos ?? c.proyectos?.length ?? 0;
+                  const badge = ESTILO_BADGE[c._estado];
+                  return (
+                    <tr key={c.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                      <td style={{ ...sTd, paddingLeft: 20 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <div style={{ width: 38, height: 38, borderRadius: "50%", background: bgAvatar, color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, letterSpacing: 0.5 }}>
+                            {ini}
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column" }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "#212121" }}>{c.nombre}</span>
+                            <span style={{ fontSize: 11, color: "#9ca3af" }}>Registrado {formatearFecha(c.createdAt)}</span>
+                          </div>
                         </div>
-                        <span style={{ fontSize: 13, fontWeight: 500, color: "#212121" }}>{c.nombre}</span>
-                      </div>
-                    </td>
-                    <td style={sTd}>
-                      <span style={{ fontSize: 13, color: "#212121" }}>{c.nombreCorto}</span>
-                    </td>
-                    <td style={sTd}>
-                      <span style={{ fontSize: 12, color: "#6b7280" }}>{c.razonSocial || "—"}</span>
-                    </td>
-                    <td style={sTd}>
-                      <span style={{ fontSize: 12, color: "#212121", fontFamily: "monospace", letterSpacing: 0.5 }}>{c.rfc || "—"}</span>
-                    </td>
-                    <td style={{ ...sTd, textAlign: "center" }}>
-                      <span style={{
-                        fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 6,
-                        background: c.activo ? "#dcfce7" : "#f3f4f6",
-                        color: c.activo ? "#166534" : "#6b7280",
-                      }}>
-                        {c.activo ? "Activo" : "Inactivo"}
-                      </span>
-                    </td>
-                    {puedoGestionar && (
-                      <td style={{ ...sTd, textAlign: "center" }}>
-                        <div style={{ display: "inline-flex", gap: 4 }}>
-                          <button onClick={() => abrirEditar(c)} style={sBtnIconoTabla} title="Editar">
-                            <Pencil size={14} />
+                      </td>
+                      <td style={sTd}>
+                        <span style={{ fontSize: 12, color: "#6b7280" }} title={c.razonSocial || ""}>{truncar(c.razonSocial, 20)}</span>
+                      </td>
+                      <td style={sTd}>
+                        <span style={{ fontSize: 12, color: "#212121", fontFamily: "monospace", letterSpacing: 0.5 }}>{c.rfc || "—"}</span>
+                      </td>
+                      <td style={sTd}>
+                        {numProyectos > 0 ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/proyectos/${c.id}`); }}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              padding: 0,
+                              color: "#c9a84c",
+                              fontSize: 13,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              textDecoration: "underline",
+                              textUnderlineOffset: 2,
+                            }}
+                          >
+                            {numProyectos} {numProyectos === 1 ? "proyecto" : "proyectos"}
                           </button>
-                          {c.activo && (
+                        ) : (
+                          <span style={{ fontSize: 13, color: "#d1d5db" }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ ...sTd, textAlign: "center" }}>
+                        <span style={{
+                          fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 6,
+                          background: badge.background,
+                          color: badge.color,
+                          textTransform: "capitalize",
+                        }}>
+                          {c._estado.toLowerCase()}
+                        </span>
+                      </td>
+                      <td style={{ ...sTd, textAlign: "center" }}>
+                        <div style={{ display: "inline-flex", gap: 6 }}>
+                          {puedoGestionar && (
+                            <button onClick={() => abrirEditar(c)} style={sBtnIconoTabla} title="Editar">
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                          <button style={sBtnIconoTabla} title="Ver">
+                            <Eye size={14} />
+                          </button>
+                          {puedoGestionar && c.activo && (
                             <button onClick={() => setModalConfirmar(c)} style={{ ...sBtnIconoTabla, color: "#ef4444" }} title="Desactivar">
                               <Power size={14} />
                             </button>
                           )}
                         </div>
                       </td>
-                    )}
-                  </tr>
-                ))
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -259,6 +358,15 @@ export default function ClientesPage() {
           onCerrar={() => setModalConfirmar(null)}
         />
       )}
+    </div>
+  );
+}
+
+function TarjetaStat({ etiqueta, valor, color }) {
+  return (
+    <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "16px 20px" }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>{etiqueta}</div>
+      <div style={{ marginTop: 6, fontSize: 26, fontWeight: 800, color, lineHeight: 1.1 }}>{valor}</div>
     </div>
   );
 }

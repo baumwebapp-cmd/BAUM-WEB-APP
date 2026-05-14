@@ -3,7 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-const ROLES_PUEDEN_CREAR = ["DUENO", "SUPERADMIN", "GERENTE"];
+const ROLES_PUEDEN_CREAR = ["DUENO", "SUPERADMIN"];
 
 function generarPIN() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -19,8 +19,20 @@ export async function GET(req) {
   const sesion = await getServerSession(authOptions);
   if (!sesion) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  const { searchParams } = new URL(req.url);
+  const clienteIdParam = searchParams.get("clienteId");
+  const where = {};
+  if (clienteIdParam) {
+    const clienteIdNum = parseInt(clienteIdParam);
+    if (isNaN(clienteIdNum)) {
+      return NextResponse.json({ error: "clienteId inválido" }, { status: 400 });
+    }
+    where.clienteId = clienteIdNum;
+  }
+
   try {
     const proyectos = await prisma.proyecto.findMany({
+      where,
       include: INCLUDE_PROYECTO,
       orderBy: { createdAt: "desc" },
     });

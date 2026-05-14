@@ -8,44 +8,19 @@ import {
   FolderOpen,
   Users,
   Building2,
-  FileText,
-  Package,
   LogOut,
   Menu,
-  X,
   ChevronRight,
 } from "lucide-react";
 
-const NAV_POR_ROL = {
-  DUENO: [
-    { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
-    { href: "/dashboard/clientes", label: "Clientes", icono: Building2 },
-    { href: "/dashboard/usuarios", label: "Usuarios", icono: Users },
-  ],
-  SUPERADMIN: [
-    { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
-    { href: "/dashboard/clientes", label: "Clientes", icono: Building2 },
-    { href: "/dashboard/usuarios", label: "Usuarios", icono: Users },
-  ],
-  GERENTE: [
-    { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
-  ],
-  DISENADOR: [
-    { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
-  ],
-  COSTOS: [
-    { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
-  ],
-  PRODUCCION: [
-    { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
-    { href: "/dashboard/proyectos", label: "Planos", icono: FolderOpen },
-  ],
-};
+const navegacion = [
+  { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
+  { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
+  { href: "/dashboard/clientes", label: "Clientes", icono: Building2 },
+  { href: "/dashboard/usuarios", label: "Usuarios", icono: Users, soloAdmin: true },
+];
+
+const ROLES_ADMIN = ["DUENO", "SUPERADMIN"];
 
 const ETIQUETA_ROL = {
   DUENO:      "Dueño",
@@ -67,7 +42,8 @@ function Sidebar({ abierto, onCerrar, anchoSidebar }) {
   const router = useRouter();
 
   const rol = sesion?.user?.rol || "GERENTE";
-  const navItems = NAV_POR_ROL[rol] || NAV_POR_ROL.GERENTE;
+  const esAdmin = ROLES_ADMIN.includes(rol);
+  const navItems = navegacion.filter((item) => !item.soloAdmin || esAdmin);
 
   async function cerrarSesion() {
     await signOut({ redirect: false });

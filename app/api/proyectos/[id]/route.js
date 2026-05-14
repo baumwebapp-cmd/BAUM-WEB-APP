@@ -3,7 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-const ROLES_PUEDEN_EDITAR = ["DUENO", "SUPERADMIN", "GERENTE"];
+const ROLES_PUEDEN_EDITAR = ["DUENO", "SUPERADMIN"];
 
 const INCLUDE_DETALLE = {
   cliente: { select: { id: true, nombre: true, nombreCorto: true, razonSocial: true, rfc: true } },
