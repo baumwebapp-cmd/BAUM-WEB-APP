@@ -35,7 +35,7 @@ function estaActivo(pathname, href, exacto) {
   return pathname.startsWith(href);
 }
 
-function Sidebar({ abierto, onCerrar, anchoSidebar }) {
+function Sidebar({ abierto, onCerrar, anchoSidebar, esDesktop }) {
   const { data: sesion } = useSession();
   const pathname = usePathname();
   const router = useRouter();
@@ -121,6 +121,31 @@ function Sidebar({ abierto, onCerrar, anchoSidebar }) {
               </a>
             );
           })}
+
+          {!esDesktop && (
+            <button
+              onClick={cerrarSesion}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 8,
+                marginTop: 8,
+                color: "#ef4444",
+                background: "transparent",
+                border: "none",
+                fontSize: 14,
+                fontWeight: 500,
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <LogOut size={18} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>Cerrar sesión</span>
+            </button>
+          )}
         </nav>
 
         <div style={{ borderTop: "1px solid #333333", padding: "16px 12px" }}>
