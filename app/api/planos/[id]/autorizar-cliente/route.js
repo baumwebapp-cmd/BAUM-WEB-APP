@@ -18,15 +18,18 @@ export async function POST(req, { params }) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-  const { decision, firmadoPor, firmaBase64, comentarios } = body;
+  const { decision, firmadoPor, cargoFirmante, firmaBase64, comentarios } = body;
 
   if (!decision || !["APROBADO", "RECHAZADO"].includes(decision)) {
     return NextResponse.json({ error: "decision debe ser APROBADO o RECHAZADO" }, { status: 400 });
   }
   let firmaBuffer = null;
   if (decision === "APROBADO") {
-    if (!firmadoPor?.trim()) {
-      return NextResponse.json({ error: "El nombre del firmante es obligatorio" }, { status: 400 });
+    if (!firmadoPor?.trim() || firmadoPor.trim().split(/\s+/).length < 3) {
+      return NextResponse.json({ error: "El nombre completo es obligatorio (mínimo 3 palabras)" }, { status: 400 });
+    }
+    if (!cargoFirmante?.trim() || cargoFirmante.trim().length < 2) {
+      return NextResponse.json({ error: "El cargo o representación es obligatorio" }, { status: 400 });
     }
     if (!firmaBase64) {
       return NextResponse.json({ error: "La firma es obligatoria para aprobar" }, { status: 400 });
@@ -237,6 +240,7 @@ export async function POST(req, { params }) {
           planoId,
           decision,
           firmadoPor: decision === "APROBADO" ? firmadoPor.trim() : "Cliente",
+          cargoFirmante: decision === "APROBADO" ? cargoFirmante.trim() : null,
           firmaBase64: null,
           urlPdfFirmado,
           comentarios: comentarios?.trim() || null,

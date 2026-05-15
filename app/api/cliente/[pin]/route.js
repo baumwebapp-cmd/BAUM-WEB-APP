@@ -7,6 +7,24 @@ import {
   respuestaBloqueado,
 } from "@/lib/rateLimit";
 
+const SELECT_PLANO = {
+  id: true,
+  version: true,
+  urlPdf: true,
+  createdAt: true,
+  subidoPor: { select: { nombre: true } },
+  autorizacionCliente: {
+    select: {
+      id: true,
+      decision: true,
+      firmadoPor: true,
+      cargoFirmante: true,
+      createdAt: true,
+      comentarios: true,
+    },
+  },
+};
+
 export async function GET(req, { params }) {
   const { pin } = await params;
   const ip = obtenerIp(req);
@@ -20,60 +38,92 @@ export async function GET(req, { params }) {
   }
 
   try {
-    const proyecto = await prisma.proyecto.findUnique({
+    const proyectoPin = await prisma.proyecto.findUnique({
       where: { pinAcceso: pin },
-      select: {
-        id: true,
-        nombre: true,
-        cliente: { select: { nombre: true, nombreCorto: true } },
-        clienteContacto: true,
-        estatus: true,
-        createdAt: true,
-        claves: {
-          orderBy: { createdAt: "asc" },
-          select: {
-            id: true,
-            codigo: true,
-            descripcion: true,
-            estatus: true,
-            planos: {
-              take: 1,
-              orderBy: { version: "desc" },
-              select: {
-                id: true,
-                version: true,
-                urlPdf: true,
-                createdAt: true,
-                subidoPor: { select: { nombre: true } },
-                autorizacionCliente: {
-                  select: {
-                    id: true,
-                    decision: true,
-                    firmadoPor: true,
-                    createdAt: true,
-                    comentarios: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+      select: { id: true, clienteId: true },
     });
 
-    if (!proyecto) {
+    if (!proyectoPin) {
       await registrarIntentoCliente(ip, pin, false);
       return NextResponse.json({ error: "Proyecto no encontrado" }, { status: 404 });
     }
 
     await registrarIntentoCliente(ip, pin, true);
 
-    const ESTATUS_VISIBLES = ["ENVIADO", "AUTORIZADO", "LIBERADO", "EN_PRODUCCION"];
-    const clavesVisibles = proyecto.claves.filter((c) => ESTATUS_VISIBLES.includes(c.estatus));
+    const cliente = proyectoPin.clienteId
+      ? await prisma.cliente.findUnique({
+          where: { id: proyectoPin.clienteId },
+          select: { nombre: true, nombreCorto: true },
+        })
+      : null;
 
-    const clienteNombre = proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente";
+    const proyectos = proyectoPin.clienteId
+      ? await prisma.proyecto.findMany({
+          where: { clienteId: proyectoPin.clienteId, estatus: "ACTIVO" },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            nombre: true,
+            claves: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                codigo: true,
+                descripcion: true,
+                estatus: true,
+                planos: { take: 1, orderBy: { version: "desc" }, select: SELECT_PLANO },
+              },
+            },
+          },
+        })
+      : await prisma.proyecto.findMany({
+          where: { id: proyectoPin.id },
+          select: {
+            id: true,
+            nombre: true,
+            claves: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                codigo: true,
+                descripcion: true,
+                estatus: true,
+                planos: { take: 1, orderBy: { version: "desc" }, select: SELECT_PLANO },
+              },
+            },
+          },
+        });
 
-    return NextResponse.json({ ...proyecto, clienteNombre, claves: clavesVisibles });
+    const pendientes = [];
+    const autorizados = [];
+    const enProduccion = [];
+
+    for (const proy of proyectos) {
+      for (const clave of proy.claves) {
+        const item = {
+          id: clave.id,
+          codigo: clave.codigo,
+          descripcion: clave.descripcion,
+          estatus: clave.estatus,
+          proyectoId: proy.id,
+          proyectoNombre: proy.nombre,
+          plano: clave.planos[0] || null,
+        };
+        if (clave.estatus === "ENVIADO") pendientes.push(item);
+        else if (clave.estatus === "AUTORIZADO" || clave.estatus === "LIBERADO") autorizados.push(item);
+        else if (clave.estatus === "EN_PRODUCCION") enProduccion.push(item);
+      }
+    }
+
+    return NextResponse.json({
+      cliente: {
+        nombre: cliente?.nombre || cliente?.nombreCorto || "Cliente",
+        nombreCorto: cliente?.nombreCorto || cliente?.nombre || "Cliente",
+      },
+      pendientes,
+      autorizados,
+      enProduccion,
+    });
   } catch (error) {
     console.error("[GET /api/cliente/[pin]]", error);
     return NextResponse.json({ error: "Error al cargar el proyecto" }, { status: 500 });

@@ -82,6 +82,7 @@ model Proyecto {
   cliente  Cliente? @relation(fields: [clienteId], references: [id])
   gerentes ProyectoGerente[]
   claves   Clave[]
+  ordenes  OrdenCambio[]
 
   @@index([estatus])
   @@index([clienteId])
@@ -160,6 +161,7 @@ model AutorizacionCliente {
   decision       Decision
   comentarios    String?
   firmadoPor     String
+  cargoFirmante  String?
   firmaBase64    String?  @db.Text
   urlPdfFirmado  String?  @db.Text
   ipCliente      String?
@@ -205,6 +207,93 @@ model IntentoAccesoCliente {
   @@index([createdAt])
 }
 
+model OrdenCambio {
+  id                      String   @id @default(uuid())
+  numOrden                String   @unique
+  tipo                    TipoOrden
+  proyectoId              Int
+  proyectoNombre          String
+  clienteNombre           String
+  contacto                String?
+  supervisorBaum          String
+  ventasBaum              String
+  generadaPor             String?
+  fechaSolicitud          String
+  solicitadaPor           String
+  concepto                String   @db.Text
+  total                   Float    @default(0)
+  ivaPorcentaje           Float    @default(16)
+  ivaImporte              Float    @default(0)
+  neto                    Float    @default(0)
+  afectacionDias          Int      @default(0)
+  requiereFirmaAdicional  Boolean  @default(false)
+  nombreFirmaAdicional    String?
+  numeroContrato          String?
+  pdfFilename             String?
+  cancelada               Boolean  @default(false)
+  creadoEn                DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  proyecto   Proyecto  @relation(fields: [proyectoId], references: [id])
+  partidas   Partida[]
+  firmas     Firma[]
+  fotos      FotoOrden[]
+  tokens     TokenFirma[]
+
+  @@index([proyectoId])
+  @@index([tipo])
+  @@index([cancelada])
+}
+
+model Partida {
+  id         Int         @id @default(autoincrement())
+  ordenId    String
+  codigo     String?
+  concepto   String      @db.Text
+  precio     Float
+  cantidad   Float
+  total      Float
+  orden      OrdenCambio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@index([ordenId])
+}
+
+model Firma {
+  id        Int         @id @default(autoincrement())
+  ordenId   String
+  rol       RolFirma
+  nombre    String?
+  empresa   String?
+  imagen    String?     @db.Text
+  fecha     DateTime?
+  orden     OrdenCambio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@unique([ordenId, rol])
+  @@index([ordenId])
+}
+
+model TokenFirma {
+  id      Int         @id @default(autoincrement())
+  ordenId String
+  rol     RolFirma
+  token   String      @unique @default(uuid())
+  usado   Boolean     @default(false)
+  orden   OrdenCambio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@unique([ordenId, rol])
+  @@index([token])
+}
+
+model FotoOrden {
+  id      Int         @id @default(autoincrement())
+  ordenId String
+  dataUrl String      @db.Text
+  nota    String?
+  orden   OrdenCambio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@index([ordenId])
+}
+
 enum Rol {
   DUENO
   SUPERADMIN
@@ -238,4 +327,17 @@ enum EstatusClave {
   AUTORIZADO
   LIBERADO
   EN_PRODUCCION
+}
+
+enum TipoOrden {
+  cambio
+  extraordinaria
+  trabajo
+}
+
+enum RolFirma {
+  cliente
+  ventas
+  supervisor
+  adicional
 }

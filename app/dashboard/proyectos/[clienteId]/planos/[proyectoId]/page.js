@@ -1122,6 +1122,7 @@ function ModalAccionCostos({ plano, clave, ejecutando, onCerrar, onConfirmado, o
   const [comentarios, setComentarios] = useState("");
   const [err, setErr] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [confirmado, setConfirmado] = useState(false);
 
   async function confirmarRechazo(e) {
     e.preventDefault();
@@ -1186,19 +1187,30 @@ function ModalAccionCostos({ plano, clave, ejecutando, onCerrar, onConfirmado, o
                 </div>
               )}
             </div>
-            <div style={{ padding: "16px 24px", borderTop: "1px solid #f0f0f0", display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-              <button onClick={onCerrar}
-                style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
-                Cerrar
-              </button>
-              <button onClick={() => setMostrando("rechazar")}
-                style={{ background: "#ef4444", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-                <X size={14} /> Rechazar
-              </button>
-              <button onClick={onConfirmado} disabled={ejecutando}
-                style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "9px 20px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: ejecutando ? "not-allowed" : "pointer", opacity: ejecutando ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}>
-                {ejecutando ? "Liberando…" : <><CheckCircle size={14} /> Liberar a producción</>}
-              </button>
+            <div style={{ padding: "16px 24px", borderTop: "1px solid #f0f0f0", display: "flex", flexDirection: "column", gap: 14 }}>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: "#212121", cursor: "pointer", lineHeight: 1.4 }}>
+                <input
+                  type="checkbox"
+                  checked={confirmado}
+                  onChange={(e) => setConfirmado(e.target.checked)}
+                  style={{ accentColor: "#c9a84c", width: 16, height: 16, marginTop: 1, flexShrink: 0, cursor: "pointer" }}
+                />
+                <span>Confirmo que las explosiones de insumos y los planos están correctos</span>
+              </label>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                <button onClick={onCerrar}
+                  style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 8, padding: "9px 20px", color: "#6b7280", fontSize: 13, cursor: "pointer" }}>
+                  Cerrar
+                </button>
+                <button onClick={() => setMostrando("rechazar")}
+                  style={{ background: "#ef4444", border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                  <X size={14} /> Rechazar
+                </button>
+                <button onClick={onConfirmado} disabled={ejecutando || !confirmado}
+                  style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "9px 20px", color: "#212121", fontWeight: 600, fontSize: 13, cursor: (ejecutando || !confirmado) ? "not-allowed" : "pointer", opacity: (ejecutando || !confirmado) ? 0.5 : 1, display: "flex", alignItems: "center", gap: 6 }}>
+                  {ejecutando ? "Autorizando…" : <><CheckCircle size={14} /> Autorizar</>}
+                </button>
+              </div>
             </div>
           </>
         )}

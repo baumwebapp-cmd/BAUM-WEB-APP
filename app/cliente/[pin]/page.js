@@ -2,26 +2,25 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { CheckCircle, XCircle, FileText, Clock, RotateCcw, Pen, ShieldCheck } from "lucide-react";
+import { CheckCircle, XCircle, FileText, Eye, RotateCcw, Pen, Check } from "lucide-react";
 import { urlPdfCliente } from "@/lib/urlPdf";
 
-const ETIQUETA_CLIENTE = {
-  ENVIADO: "Pendiente de revisión",
-  AUTORIZADO: "Autorizado",
-  RECHAZADO: "Rechazado",
-  LIBERADO: "Liberado",
-  EN_PRODUCCION: "En producción",
-};
-
-const ESTATUS_FINALES = ["AUTORIZADO", "LIBERADO", "EN_PRODUCCION"];
+const CHECKLIST_DISENADOR = [
+  "Las medidas corresponden al levantamiento en sitio",
+  "Los materiales y acabados coinciden con lo acordado",
+  "Las herrajes y accesorios están especificados",
+  "Los planos de detalle están completos",
+  "La explosión de insumos fue revisada",
+  "El plano está libre de observaciones internas",
+];
 
 export default function ClientePage() {
   const { pin } = useParams();
-  const [proyecto, setProyecto] = useState(null);
+  const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [pinInvalido, setPinInvalido] = useState(false);
-  const [modalRevisar, setModalRevisar] = useState(null);
+  const [modal, setModal] = useState(null);
   const [esMobil, setEsMobil] = useState(false);
 
   useEffect(() => {
@@ -59,14 +58,11 @@ export default function ClientePage() {
       const res = await fetch(`/api/cliente/${pin}`);
       const data = await res.json();
       if (!res.ok) {
-        if (res.status === 404 || res.status === 400) {
-          setPinInvalido(true);
-        } else {
-          setError(data.error || "Error al cargar el proyecto");
-        }
+        if (res.status === 404 || res.status === 400) setPinInvalido(true);
+        else setError(data.error || "Error al cargar el proyecto");
         return;
       }
-      setProyecto(data);
+      setDatos(data);
     } catch {
       setError("Error de conexión. Verifica tu internet e intenta de nuevo.");
     } finally {
@@ -79,77 +75,117 @@ export default function ClientePage() {
   if (cargando) return <PantallaEstado tipo="cargando" />;
   if (pinInvalido) return <PantallaEstado tipo="pin-invalido" />;
   if (error) return <PantallaEstado tipo="error" mensaje={error} />;
-  if (!proyecto) return null;
+  if (!datos) return null;
 
-  const claves = proyecto.claves || [];
-  const clavesPendientes = claves.filter((c) => c.estatus === "ENVIADO");
-  const todasFinales = claves.length > 0 && claves.every((c) => ESTATUS_FINALES.includes(c.estatus));
+  const { cliente, pendientes, autorizados, enProduccion } = datos;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f5f5f5", color: "#212121", overflowX: "hidden", userSelect: "none", WebkitUserSelect: "none" }}>
-      <header style={{ background: "#212121", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 10, height: 60 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img src="/baum_logo_bco.svg" alt="BAUM" style={{ height: 32, width: "auto" }} />
-          <div style={{ width: 1, height: 24, background: "#444444" }} />
-          <span style={{ fontSize: 13, color: "#888888" }}>Portal de aprobación de planos</span>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#ffffff" }}>{proyecto.clienteNombre}</div>
-          <div style={{ fontSize: 11, color: "#888888" }}>{proyecto.nombre}</div>
+      <header style={{ background: "#212121", padding: "20px 24px" }}>
+        <div style={{ maxWidth: 980, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+          <img src="/baum_logo_bco.svg" alt="BAUM" style={{ height: 38, width: "auto" }} />
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 13, color: "#888888" }}>Bienvenido</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#ffffff" }}>{cliente.nombre}</div>
+          </div>
         </div>
       </header>
+      <div style={{ height: 1, background: "#e5e5e5" }} />
 
-      <main style={{ maxWidth: 980, margin: "0 auto", padding: "28px 16px" }}>
-        {claves.length === 0 ? (
-          <BloqueEstado
-            icono={<Clock size={42} style={{ opacity: 0.3, color: "#888888" }} />}
-            titulo="Tu proyecto está siendo preparado."
-            mensaje="Recibirás un aviso cuando haya planos listos para revisar."
-          />
-        ) : todasFinales ? (
-          <BloqueEstado
-            icono={<ShieldCheck size={48} style={{ color: "#16a34a" }} />}
-            titulo="Proyecto completado"
-            mensaje="Has autorizado todos los planos de este proyecto. Gracias por tu colaboración."
-            color="#166534"
-          />
-        ) : clavesPendientes.length === 0 ? (
-          <BloqueEstado
-            icono={<CheckCircle size={42} style={{ opacity: 0.4, color: "#888888" }} />}
-            titulo="No tienes planos pendientes de revisión en este momento."
-          />
-        ) : (
-          <>
-            <div style={{ marginBottom: 22 }}>
-              <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800, color: "#212121" }}>Planos pendientes de revisión</h1>
-              <p style={{ margin: 0, fontSize: 13, color: "#666666" }}>{proyecto.nombre} · {proyecto.clienteNombre}</p>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: esMobil ? "1fr" : "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-              {clavesPendientes.map((c) => {
-                const planoActivo = c.planos?.[0] || null;
-                return (
-                  <CardClavePendiente
-                    key={c.id}
-                    clave={c}
-                    plano={planoActivo}
-                    onRevisar={() => planoActivo && setModalRevisar({ clave: c, plano: planoActivo })}
-                  />
-                );
-              })}
-            </div>
-          </>
-        )}
+      <main style={{ maxWidth: 980, margin: "0 auto", padding: "28px 16px", display: "flex", flexDirection: "column", gap: 36 }}>
+        <Seccion
+          titulo={`Pendientes de firma (${pendientes.length})`}
+          color="#f59e0b"
+          vacioMensaje="No tienes planos pendientes de firma ✓"
+          vacioColor="#10b981"
+          items={pendientes}
+          esMobil={esMobil}
+          render={(c) => (
+            <CardClave
+              key={c.id}
+              clave={c}
+              badge={{ texto: "Pendiente de revisión", bg: "#fef9c3", color: "#854d0e" }}
+              boton={{
+                texto: "Revisar y firmar",
+                icono: <FileText size={16} />,
+                estilo: { background: "#c9a84c", color: "#212121", border: "none" },
+                onClick: () => c.plano && setModal({ modo: "firmar", clave: c }),
+                disabled: !c.plano,
+              }}
+            />
+          )}
+        />
+
+        <Seccion
+          titulo={`Autorizados (${autorizados.length})`}
+          color="#10b981"
+          vacioMensaje="No hay planos autorizados todavía."
+          vacioColor="#6b7280"
+          items={autorizados}
+          esMobil={esMobil}
+          render={(c) => (
+            <CardClave
+              key={c.id}
+              clave={c}
+              badge={{ texto: "Autorizado", bg: "#dcfce7", color: "#166534" }}
+              extra={c.plano?.autorizacionCliente?.createdAt && (
+                <div style={{ fontSize: 12, color: "#888888" }}>
+                  Autorizado el {formatearFecha(c.plano.autorizacionCliente.createdAt)}
+                </div>
+              )}
+              boton={{
+                texto: "Ver plano",
+                icono: <Eye size={16} />,
+                estilo: { background: "#ffffff", color: "#10b981", border: "2px solid #10b981" },
+                onClick: () => c.plano && setModal({ modo: "ver", clave: c }),
+                disabled: !c.plano,
+              }}
+            />
+          )}
+        />
+
+        <Seccion
+          titulo={`En producción (${enProduccion.length})`}
+          color="#3b82f6"
+          vacioMensaje="No hay planos en producción."
+          vacioColor="#6b7280"
+          items={enProduccion}
+          esMobil={esMobil}
+          render={(c) => (
+            <CardClave
+              key={c.id}
+              clave={c}
+              badge={{ texto: "En producción", bg: "#dbeafe", color: "#1e40af" }}
+              boton={{
+                texto: "Ver plano",
+                icono: <Eye size={16} />,
+                estilo: { background: "#ffffff", color: "#3b82f6", border: "2px solid #3b82f6" },
+                onClick: () => c.plano && setModal({ modo: "ver", clave: c }),
+                disabled: !c.plano,
+              }}
+            />
+          )}
+        />
       </main>
 
-      {modalRevisar && (
+      {modal && modal.modo === "firmar" && (
         <ModalRevisar
-          clave={modalRevisar.clave}
-          plano={modalRevisar.plano}
+          clave={modal.clave}
+          plano={modal.clave.plano}
           pin={pin}
           esMobil={esMobil}
-          clienteContacto={proyecto.clienteContacto}
-          onCerrar={() => setModalRevisar(null)}
-          onCompletado={() => { setModalRevisar(null); cargar(); }}
+          onCerrar={() => setModal(null)}
+          onCompletado={() => { setModal(null); cargar(); }}
+        />
+      )}
+
+      {modal && modal.modo === "ver" && (
+        <ModalVerPlano
+          clave={modal.clave}
+          plano={modal.clave.plano}
+          pin={pin}
+          esMobil={esMobil}
+          onCerrar={() => setModal(null)}
         />
       )}
 
@@ -160,55 +196,101 @@ export default function ClientePage() {
   );
 }
 
-function BloqueEstado({ icono, titulo, mensaje, color }) {
+function formatearFecha(fecha) {
+  if (!fecha) return "";
+  return new Date(fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+function Seccion({ titulo, color, vacioMensaje, vacioColor, items, render, esMobil }) {
   return (
-    <div style={{ background: "#ffffff", borderRadius: 14, border: "1px solid #e5e5e5", textAlign: "center", padding: "64px 24px" }}>
-      <div style={{ marginBottom: 18, display: "flex", justifyContent: "center" }}>{icono}</div>
-      <p style={{ margin: "0 0 8px", fontSize: 17, fontWeight: 700, color: color || "#212121" }}>{titulo}</p>
-      {mensaje && (
-        <p style={{ margin: "0 auto", fontSize: 13, color: "#666666", maxWidth: 460, lineHeight: 1.55 }}>{mensaje}</p>
+    <section>
+      <h2 style={{ margin: "0 0 14px", fontSize: 17, fontWeight: 800, color, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ width: 4, height: 18, background: color, borderRadius: 2, display: "inline-block" }} />
+        {titulo}
+      </h2>
+      {items.length === 0 ? (
+        <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "32px 20px", textAlign: "center", fontSize: 14, fontWeight: 600, color: vacioColor }}>
+          {vacioMensaje}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: esMobil ? "1fr" : "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          {items.map(render)}
+        </div>
       )}
-    </div>
+    </section>
   );
 }
 
-function CardClavePendiente({ clave, plano, onRevisar }) {
+function CardClave({ clave, badge, boton, extra }) {
   return (
-    <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#212121" }}>{clave.codigo}</h3>
-        <span style={{ background: "#fef9c3", color: "#854d0e", padding: "4px 10px", borderRadius: 99, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
-          {ETIQUETA_CLIENTE.ENVIADO}
+    <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#212121", overflowWrap: "break-word", wordBreak: "break-word" }}>
+          {clave.proyectoNombre} — {clave.codigo}
+        </h3>
+        <span style={{ background: badge.bg, color: badge.color, padding: "4px 10px", borderRadius: 99, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>
+          {badge.texto}
         </span>
       </div>
       <p style={{ margin: 0, fontSize: 13, color: "#555555", lineHeight: 1.55, overflowWrap: "break-word", wordBreak: "break-word" }}>
         {clave.descripcion}
       </p>
-      {plano && (
-        <div style={{ fontSize: 12, color: "#888888" }}>
-          Versión v{plano.version}
-        </div>
-      )}
+      {extra}
       <button
-        onClick={onRevisar}
-        disabled={!plano}
+        onClick={boton.onClick}
+        disabled={boton.disabled}
         style={{
-          marginTop: 6,
-          background: "#c9a84c", color: "#212121",
-          border: "none", borderRadius: 10, padding: "12px",
+          marginTop: 4,
+          ...boton.estilo,
+          borderRadius: 10, padding: "12px",
           fontSize: 14, fontWeight: 700,
-          cursor: plano ? "pointer" : "not-allowed",
-          opacity: plano ? 1 : 0.5,
+          cursor: boton.disabled ? "not-allowed" : "pointer",
+          opacity: boton.disabled ? 0.5 : 1,
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
         }}
       >
-        <FileText size={16} /> Revisar y firmar
+        {boton.icono} {boton.texto}
       </button>
     </div>
   );
 }
 
-function ModalRevisar({ clave, plano, pin, esMobil, clienteContacto, onCerrar, onCompletado }) {
+function VisorPdf({ pin, planoId, codigo, esMobil }) {
+  return (
+    <div style={{ padding: 14, userSelect: "none", WebkitUserSelect: "none" }}>
+      <iframe
+        src={`${urlPdfCliente(pin, planoId)}#toolbar=0&navpanes=0&scrollbar=0`}
+        style={{ width: "100%", height: esMobil ? 400 : 500, border: "none", display: "block" }}
+        title={`Plano ${codigo}`}
+      />
+    </div>
+  );
+}
+
+function ModalVerPlano({ clave, plano, pin, esMobil, onCerrar }) {
+  return (
+    <div style={sOverlay} onClick={(e) => e.target === e.currentTarget && onCerrar()}>
+      <div style={{ background: "#ffffff", borderRadius: 14, width: esMobil ? "96%" : "92%", maxWidth: 900, maxHeight: "94vh", overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{ margin: "0 0 2px", fontSize: 16, fontWeight: 700, color: "#212121" }}>{clave.proyectoNombre} — {clave.codigo}</h2>
+            <p style={{ margin: 0, fontSize: 12, color: "#666666", overflowWrap: "break-word", wordBreak: "break-word" }}>{clave.descripcion}</p>
+          </div>
+          <button onClick={onCerrar} style={sBtnCerrar}>×</button>
+        </div>
+        <VisorPdf pin={pin} planoId={plano.id} codigo={clave.codigo} esMobil={esMobil} />
+        <div style={{ padding: "14px 20px", borderTop: "1px solid #f0f0f0", display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={onCerrar}
+            style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #e5e5e5", background: "#ffffff", color: "#555555", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalRevisar({ clave, plano, pin, esMobil, onCerrar, onCompletado }) {
   const [vista, setVista] = useState("ver");
 
   return (
@@ -216,40 +298,51 @@ function ModalRevisar({ clave, plano, pin, esMobil, clienteContacto, onCerrar, o
       <div style={{ background: "#ffffff", borderRadius: 14, width: esMobil ? "96%" : "92%", maxWidth: 900, maxHeight: "94vh", overflowY: "auto", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div style={{ minWidth: 0 }}>
-            <h2 style={{ margin: "0 0 2px", fontSize: 16, fontWeight: 700, color: "#212121" }}>{clave.codigo} — v{plano.version}</h2>
+            <h2 style={{ margin: "0 0 2px", fontSize: 16, fontWeight: 700, color: "#212121" }}>{clave.proyectoNombre} — {clave.codigo}</h2>
             <p style={{ margin: 0, fontSize: 12, color: "#666666", overflowWrap: "break-word", wordBreak: "break-word" }}>{clave.descripcion}</p>
           </div>
-          <button onClick={onCerrar} style={{ background: "transparent", border: "none", color: "#888888", cursor: "pointer", fontSize: 24, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
+          <button onClick={onCerrar} style={sBtnCerrar}>×</button>
         </div>
 
         {vista === "ver" && (
           <>
-            <div style={{ padding: 14, userSelect: "none", WebkitUserSelect: "none" }}>
-              <iframe
-                src={`${urlPdfCliente(pin, plano.id)}#toolbar=0&navpanes=0&scrollbar=0`}
-                style={{ width: "100%", height: esMobil ? 400 : 500, border: "none", display: "block" }}
-                title={`Plano ${clave.codigo}`}
-              />
+            <VisorPdf pin={pin} planoId={plano.id} codigo={clave.codigo} esMobil={esMobil} />
+
+            <div style={{ padding: "0 20px 14px" }}>
+              <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "14px 16px" }}>
+                <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: "#166534" }}>
+                  El diseñador confirmó los siguientes puntos:
+                </p>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 7 }}>
+                  {CHECKLIST_DISENADOR.map((item) => (
+                    <li key={item} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "#15803d", lineHeight: 1.45 }}>
+                      <Check size={15} style={{ color: "#16a34a", flexShrink: 0, marginTop: 2 }} />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
+
             <div style={{ padding: "14px 20px", borderTop: "1px solid #f0f0f0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, position: esMobil ? "sticky" : "static", bottom: 0, background: "#ffffff", zIndex: 5 }}>
               <button
                 onClick={() => setVista("rechazar")}
-                style={{ padding: "14px", borderRadius: 10, border: "2px solid #ef4444", background: "#ffffff", color: "#ef4444", fontWeight: 700, fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                style={{ padding: "14px", borderRadius: 10, border: "none", background: "#ef4444", color: "#ffffff", fontWeight: 700, fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
               >
-                <XCircle size={18} /> Solicitar cambios
+                <XCircle size={18} /> Rechazar
               </button>
               <button
                 onClick={() => setVista("aprobar")}
-                style={{ padding: "14px", borderRadius: 10, border: "2px solid #c9a84c", background: "#c9a84c", color: "#212121", fontWeight: 700, fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                style={{ padding: "14px", borderRadius: 10, border: "none", background: "#10b981", color: "#ffffff", fontWeight: 700, fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
               >
-                <CheckCircle size={18} /> Aprobar plano
+                <CheckCircle size={18} /> Aprobar y firmar
               </button>
             </div>
           </>
         )}
 
         {vista === "aprobar" && (
-          <FormaFirma planoId={plano.id} clienteContacto={clienteContacto} onCancelar={() => setVista("ver")} onCompletado={onCompletado} />
+          <FormaFirma planoId={plano.id} onCancelar={() => setVista("ver")} onCompletado={onCompletado} />
         )}
 
         {vista === "rechazar" && (
@@ -260,11 +353,11 @@ function ModalRevisar({ clave, plano, pin, esMobil, clienteContacto, onCerrar, o
   );
 }
 
-function FormaFirma({ planoId, clienteContacto, onCancelar, onCompletado }) {
+function FormaFirma({ planoId, onCancelar, onCompletado }) {
   const canvasRef = useRef(null);
   const dibujando = useRef(false);
-  const contactoFijo = (clienteContacto || "").trim();
-  const [firmadoPor, setFirmadoPor] = useState(contactoFijo);
+  const [firmadoPor, setFirmadoPor] = useState("");
+  const [cargoFirmante, setCargoFirmante] = useState("");
   const [firmaTocada, setFirmaTocada] = useState(false);
   const [err, setErr] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -308,7 +401,12 @@ function FormaFirma({ planoId, clienteContacto, onCancelar, onCompletado }) {
   }
 
   async function enviar() {
-    if (!firmadoPor.trim()) return setErr("Ingresa tu nombre completo para firmar.");
+    if (firmadoPor.trim().split(/\s+/).filter(Boolean).length < 3) {
+      return setErr("Ingresa tu nombre completo (mínimo 3 palabras).");
+    }
+    if (cargoFirmante.trim().length < 2) {
+      return setErr("Indica tu cargo o representación.");
+    }
     if (!firmaTocada) return setErr("Por favor dibuja tu firma antes de continuar.");
     const firmaBase64 = canvasRef.current.toDataURL("image/png");
     setEnviando(true); setErr("");
@@ -316,7 +414,7 @@ function FormaFirma({ planoId, clienteContacto, onCancelar, onCompletado }) {
       const res = await fetch(`/api/planos/${planoId}/autorizar-cliente`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: "APROBADO", firmadoPor: firmadoPor.trim(), firmaBase64 }),
+        body: JSON.stringify({ decision: "APROBADO", firmadoPor: firmadoPor.trim(), cargoFirmante: cargoFirmante.trim(), firmaBase64 }),
       });
       const data = await res.json();
       if (!res.ok) return setErr(data.error || "Error al procesar la aprobación.");
@@ -332,22 +430,29 @@ function FormaFirma({ planoId, clienteContacto, onCancelar, onCompletado }) {
       <p style={{ margin: "0 0 16px", fontSize: 13, color: "#666666", lineHeight: 1.55 }}>
         Al firmar confirmas que has revisado el plano y que apruebas su contenido para fabricación.
       </p>
+
       <div style={{ marginBottom: 14 }}>
-        <label style={sLabel}>Tu nombre completo</label>
-        {contactoFijo ? (
-          <div style={{ background: "#f9f9f9", padding: 10, borderRadius: 8, fontSize: 14, fontWeight: 500, color: "#212121" }}>
-            Firmado por: {contactoFijo}
-          </div>
-        ) : (
-          <input
-            className="input-base"
-            style={{ width: "100%", boxSizing: "border-box" }}
-            placeholder="Como aparecerá en el documento"
-            value={firmadoPor}
-            onChange={(e) => { setFirmadoPor(e.target.value); setErr(""); }}
-          />
-        )}
+        <label style={sLabel}>Nombre completo <span style={{ color: "#ef4444" }}>*</span></label>
+        <input
+          className="input-base"
+          style={{ width: "100%", boxSizing: "border-box" }}
+          placeholder="Nombre y apellidos como aparecerá en el documento"
+          value={firmadoPor}
+          onChange={(e) => { setFirmadoPor(e.target.value); setErr(""); }}
+        />
       </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={sLabel}>Cargo o representación <span style={{ color: "#ef4444" }}>*</span></label>
+        <input
+          className="input-base"
+          style={{ width: "100%", boxSizing: "border-box" }}
+          placeholder="Ej. Propietario, Arquitecto responsable…"
+          value={cargoFirmante}
+          onChange={(e) => { setCargoFirmante(e.target.value); setErr(""); }}
+        />
+      </div>
+
       <div style={{ marginBottom: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <label style={sLabel}>Firma</label>
@@ -370,7 +475,7 @@ function FormaFirma({ planoId, clienteContacto, onCancelar, onCompletado }) {
           style={{
             width: "100%", height: 140,
             background: "#fafafa",
-            border: `2px solid ${firmaTocada ? "#c9a84c" : "#e5e5e5"}`,
+            border: `2px solid ${firmaTocada ? "#10b981" : "#e5e5e5"}`,
             borderRadius: 8, cursor: "crosshair", display: "block", touchAction: "none",
           }}
         />
@@ -380,19 +485,21 @@ function FormaFirma({ planoId, clienteContacto, onCancelar, onCompletado }) {
           </p>
         )}
       </div>
+
       {err && (
         <p style={{ margin: "0 0 10px", padding: "8px 12px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, color: "#991b1b", fontSize: 13 }}>
           {err}
         </p>
       )}
+
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16, flexWrap: "wrap" }}>
         <button onClick={onCancelar} disabled={enviando}
           style={{ padding: "10px 18px", borderRadius: 8, border: "1px solid #e5e5e5", background: "#ffffff", color: "#555555", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
           Volver
         </button>
         <button onClick={enviar} disabled={enviando}
-          style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: "#c9a84c", color: "#212121", fontWeight: 700, fontSize: 14, cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? 0.7 : 1 }}>
-          {enviando ? "Procesando…" : "Confirmar aprobación"}
+          style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: "#10b981", color: "#ffffff", fontWeight: 700, fontSize: 14, cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? 0.7 : 1 }}>
+          {enviando ? "Procesando…" : "Aprobar y firmar"}
         </button>
       </div>
     </div>
@@ -424,13 +531,13 @@ function FormaRechazo({ planoId, onCancelar, onCompletado }) {
   return (
     <div style={{ padding: "20px 22px" }}>
       <h3 style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: "#ef4444", display: "flex", alignItems: "center", gap: 8 }}>
-        <XCircle size={16} /> Solicitar cambios
+        <XCircle size={16} /> Rechazar plano
       </h3>
       <p style={{ margin: "0 0 14px", fontSize: 13, color: "#666666", lineHeight: 1.55 }}>
-        El plano regresará a revisión interna. Describe con detalle qué debe modificarse.
+        El plano regresará a revisión interna. Describe qué debe corregir.
       </p>
       <div style={{ marginBottom: 14 }}>
-        <label style={sLabel}>Comentarios <span style={{ color: "#ef4444" }}>*</span></label>
+        <label style={sLabel}>Describe qué debe corregir <span style={{ color: "#ef4444" }}>*</span></label>
         <textarea
           className="input-base"
           style={{ width: "100%", boxSizing: "border-box", minHeight: 110, resize: "vertical", fontFamily: "inherit" }}
@@ -450,7 +557,7 @@ function FormaRechazo({ planoId, onCancelar, onCompletado }) {
         </button>
         <button onClick={enviar} disabled={enviando || comentarios.trim().length < 10}
           style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: "#ef4444", color: "#ffffff", fontWeight: 700, fontSize: 14, cursor: (enviando || comentarios.trim().length < 10) ? "not-allowed" : "pointer", opacity: (enviando || comentarios.trim().length < 10) ? 0.6 : 1 }}>
-          {enviando ? "Enviando…" : "Solicitar cambios"}
+          {enviando ? "Enviando…" : "Rechazar"}
         </button>
       </div>
     </div>
@@ -475,11 +582,7 @@ function LogoCargando() {
 
   return (
     <div style={{ position: "relative", height: 80, width: "auto", marginBottom: 24 }}>
-      <img
-        src="/isotipo_baum.svg"
-        alt="BAUM"
-        style={{ height: 80, display: "block", filter: "grayscale(1) opacity(0.2)" }}
-      />
+      <img src="/isotipo_baum.svg" alt="BAUM" style={{ height: 80, display: "block", filter: "grayscale(1) opacity(0.2)" }} />
       <img
         src="/isotipo_baum.svg"
         alt=""
@@ -529,4 +632,8 @@ const sOverlay = {
 
 const sLabel = {
   display: "block", marginBottom: 5, fontSize: 12, fontWeight: 600, color: "#888888", textTransform: "uppercase", letterSpacing: "0.05em",
+};
+
+const sBtnCerrar = {
+  background: "transparent", border: "none", color: "#888888", cursor: "pointer", fontSize: 24, lineHeight: 1, padding: 4, flexShrink: 0,
 };

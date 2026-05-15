@@ -3,21 +3,14 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Search, ChevronRight, AlertTriangle, AlertCircle } from "lucide-react";
+import { Search, AlertCircle } from "lucide-react";
 
-const ROLES_GLOBAL = ["DUENO", "SUPERADMIN", "GERENTE"];
 const POR_PAGINA = 10;
 
 const ESTATUS_PROYECTO = {
   ACTIVO:     { color: "#166534", bg: "#dcfce7", label: "Activo" },
   PAUSADO:    { color: "#854d0e", bg: "#fef9c3", label: "Pausado" },
   COMPLETADO: { color: "#374151", bg: "#f3f4f6", label: "Completado" },
-};
-
-const PENDIENTES_LABEL = {
-  BORRADOR:  { texto: "Sin plano",   bg: "#f3f4f6", color: "#6b7280" },
-  RECHAZADO: { texto: "Rechazado",   bg: "#fee2e2", color: "#991b1b" },
-  AUTORIZADO:{ texto: "Pendiente de liberar", bg: "#fef3c7", color: "#92400e" },
 };
 
 function colorClave(updatedAt) {
@@ -57,11 +50,6 @@ function contarPorStatus(claves) {
   return conteo;
 }
 
-function diasDesde(fecha) {
-  if (!fecha) return 0;
-  return Math.floor((Date.now() - new Date(fecha).getTime()) / 86400000);
-}
-
 export default function InicioPage() {
   const { data: sesion, status: sesionStatus } = useSession();
   const rol = sesion?.user?.rol;
@@ -83,13 +71,7 @@ export default function InicioPage() {
         <TabBoton activo={tab === "planos"} onClick={() => setTab("planos")}>Planos</TabBoton>
       </div>
 
-      {tab === "planos" && (
-        ROLES_GLOBAL.includes(rol)
-          ? <CentroControlGlobal />
-          : rol === "DISENADOR" || rol === "COSTOS"
-            ? <Pendientes rol={rol} />
-            : <Vacio mensaje="Sin contenido disponible para tu rol." />
-      )}
+      {tab === "planos" && <CentroControlGlobal />}
     </div>
   );
 }
@@ -112,14 +94,6 @@ function TabBoton({ activo, onClick, children }) {
     >
       {children}
     </button>
-  );
-}
-
-function Vacio({ mensaje }) {
-  return (
-    <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "48px 24px", textAlign: "center", color: "#6b7280", fontSize: 14 }}>
-      {mensaje}
-    </div>
   );
 }
 
@@ -161,7 +135,7 @@ function CentroControlGlobal() {
   useEffect(() => { cargar(); }, [cargar]);
 
   useEffect(() => {
-    const intervalo = setInterval(cargar, 30000);
+    const intervalo = setInterval(cargar, 300000);
     return () => clearInterval(intervalo);
   }, [cargar]);
 
@@ -611,127 +585,6 @@ function CardProyecto({ proyecto, onClick }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function Pendientes({ rol }) {
-  const router = useRouter();
-  const [pendientes, setPendientes] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState("");
-
-  const cargar = useCallback(async () => {
-    setError("");
-    try {
-      const res = await fetch("/api/dashboard/pendientes");
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setError(d.error || "Error al cargar pendientes");
-        return;
-      }
-      setPendientes(await res.json());
-    } catch {
-      setError("Error de conexión");
-    } finally {
-      setCargando(false);
-    }
-  }, []);
-
-  useEffect(() => { cargar(); }, [cargar]);
-
-  const titulo = rol === "DISENADOR" ? "Mis pendientes — Planos" : "Mis pendientes — Liberaciones";
-  const vacio = rol === "DISENADOR" ? "No tienes planos pendientes 🎉" : "No tienes liberaciones pendientes 🎉";
-
-  if (cargando) {
-    return <div style={{ display: "flex", justifyContent: "center", padding: 48 }}><div className="spinner" /></div>;
-  }
-
-  if (error) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: 48, gap: 12 }}>
-        <AlertCircle size={32} style={{ color: "#ef4444" }} />
-        <p style={{ margin: 0, color: "#6b7280" }}>{error}</p>
-        <button onClick={() => { setCargando(true); cargar(); }} style={{ background: "#c9a84c", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 600, cursor: "pointer", color: "#212121" }}>
-          Reintentar
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <h2 style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 700, color: "#212121" }}>{titulo}</h2>
-
-      {pendientes.length === 0 ? (
-        <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "48px 24px", textAlign: "center", color: "#6b7280", fontSize: 14 }}>
-          {vacio}
-        </div>
-      ) : (
-        <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, overflow: "hidden" }}>
-          {pendientes.map((p) => (
-            <FilaPendiente
-              key={p.id}
-              pendiente={p}
-              rol={rol}
-              onClick={() => router.push(`/dashboard/proyectos/${p.clienteId}/planos/${p.proyectoId}`)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FilaPendiente({ pendiente, rol, onClick }) {
-  const [hov, setHov] = useState(false);
-  const etiqueta = PENDIENTES_LABEL[pendiente.estatus] || { texto: pendiente.estatus, bg: "#f3f4f6", color: "#6b7280" };
-  const mostrarComentario = pendiente.estatus === "RECHAZADO" && pendiente.comentariosRechazo;
-
-  return (
-    <div
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "16px 20px",
-        borderBottom: "1px solid #f3f4f6",
-        background: hov ? "#fafafa" : "#ffffff",
-        transition: "background 0.1s",
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#212121" }}>{pendiente.codigo}</span>
-          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: etiqueta.bg, color: etiqueta.color }}>
-            {etiqueta.texto}
-          </span>
-        </div>
-        <p style={{ margin: "3px 0 0", fontSize: 12, color: "#555555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {pendiente.descripcion}
-        </p>
-        <p style={{ margin: "3px 0 0", fontSize: 11, color: "#9ca3af" }}>
-          {pendiente.proyectoNombre} · {pendiente.clienteNombre}
-          {rol === "COSTOS" && pendiente.updatedAt && (
-            <> · {diasDesde(pendiente.updatedAt)}d en autorizado</>
-          )}
-        </p>
-        {mostrarComentario && (
-          <div style={{ marginTop: 8, padding: "8px 12px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, display: "flex", gap: 8, alignItems: "flex-start" }}>
-            <AlertTriangle size={14} style={{ color: "#dc2626", flexShrink: 0, marginTop: 2 }} />
-            <span style={{ fontSize: 12, color: "#991b1b", lineHeight: 1.4 }}>{pendiente.comentariosRechazo}</span>
-          </div>
-        )}
-      </div>
-
-      <button
-        onClick={onClick}
-        style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#212121", border: "none", borderRadius: 6, padding: "6px 12px", color: "#c9a84c", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}
-      >
-        Ir al proyecto <ChevronRight size={12} />
-      </button>
     </div>
   );
 }
