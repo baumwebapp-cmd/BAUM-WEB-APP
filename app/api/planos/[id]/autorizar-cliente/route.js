@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, readFile } from "fs/promises";
 import path from "path";
 import { DIRECTORIO_PLANOS, leerArchivoPdf, decodificarFirmaPng } from "@/lib/archivos";
 import { registrarAuditoria } from "@/lib/auditoria";
@@ -96,51 +96,119 @@ export async function POST(req, { params }) {
       const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const { width, height } = paginaAcuse.getSize();
 
-      paginaAcuse.drawRectangle({
-        x: 0, y: height - 8,
-        width: width, height: 8,
-        color: rgb(0.788, 0.659, 0.298),
-      });
+      const NEGRO = rgb(0.129, 0.129, 0.129);
+      const DORADO = rgb(0.788, 0.659, 0.298);
+      const GRIS = rgb(0.6, 0.6, 0.6);
+      const GRIS_CLARO = rgb(0.898, 0.898, 0.898);
+      const GRIS_OSCURO = rgb(0.25, 0.25, 0.25);
+      const BLANCO = rgb(1, 1, 1);
 
-      paginaAcuse.drawText("ACUSE DE AUTORIZACION", {
-        x: 72, y: height - 80,
-        size: 22, font: helveticaBold,
-        color: rgb(0.129, 0.129, 0.129),
-      });
+      const textoCentrado = (texto, yPos, size, font, color) => {
+        const w = font.widthOfTextAtSize(texto, size);
+        paginaAcuse.drawText(texto, { x: (width - w) / 2, y: yPos, size, font, color });
+      };
 
-      paginaAcuse.drawLine({
-        start: { x: 72, y: height - 95 },
-        end: { x: width - 72, y: height - 95 },
-        thickness: 1,
-        color: rgb(0.898, 0.898, 0.898),
-      });
-
-      paginaAcuse.drawText(
-        "El presente documento ha sido revisado y autorizado en su totalidad.",
-        { x: 72, y: height - 130, size: 11, font: helvetica, color: rgb(0.4, 0.4, 0.4) }
-      );
-
-      let y = height - 170;
-      const colorDato = rgb(0.129, 0.129, 0.129);
-
-      function escribirCampo(label, valor) {
-        paginaAcuse.drawText(label, { x: 72, y, size: 10, font: helveticaBold, color: colorDato });
-        paginaAcuse.drawText(valor, { x: 160, y, size: 10, font: helvetica, color: colorDato });
-        y -= 20;
+      let firmaImg;
+      try {
+        firmaImg = await pdfDoc.embedPng(firmaBuffer);
+      } catch (errEmbed) {
+        console.error("[autorizar-cliente] embedPng falló", errEmbed);
+        return NextResponse.json({ error: "No se pudo procesar la firma" }, { status: 400 });
       }
 
-      escribirCampo("PROYECTO:", plano.clave.proyecto.nombre);
-      escribirCampo("CLAVE:", plano.clave.codigo);
-      escribirCampo("VERSION:", `v${plano.version}`);
-      escribirCampo("CLIENTE:", plano.clave.proyecto.cliente?.nombre || plano.clave.proyecto.cliente?.nombreCorto || "Sin cliente");
+      // 1. ENCABEZADO — franja negra superior
+      paginaAcuse.drawRectangle({
+        x: 0, y: height - 70,
+        width, height: 70,
+        color: NEGRO,
+      });
 
-      paginaAcuse.drawText("DESCRIPCION:", { x: 72, y, size: 10, font: helveticaBold, color: colorDato });
-      const descripcion = plano.clave.descripcion || "";
+      let logoEmbebido = null;
+      try {
+        const rutaLogo = path.join(process.cwd(), "public", "logo-acuse.png");
+        const logoBytes = await readFile(rutaLogo);
+        logoEmbebido = await pdfDoc.embedPng(logoBytes);
+      } catch {
+        logoEmbebido = null;
+      }
+
+      if (logoEmbebido) {
+        const logoAlto = 40;
+        const escala = logoAlto / logoEmbebido.height;
+        const logoAncho = logoEmbebido.width * escala;
+        paginaAcuse.drawImage(logoEmbebido, {
+          x: 50,
+          y: height - 35 - logoAlto / 2,
+          width: logoAncho,
+          height: logoAlto,
+        });
+      } else {
+        paginaAcuse.drawText("BAUM", {
+          x: 50, y: height - 50,
+          size: 28, font: helveticaBold, color: BLANCO,
+        });
+      }
+
+      textoCentrado("BAUM INDUSTRIA CARPINTERA", height - 28, 13, helveticaBold, BLANCO);
+      textoCentrado("TEME GRUPO INDUSTRIAL SA DE CV", height - 43, 9, helvetica, BLANCO);
+      textoCentrado("Acuse de Autorización de Plano", height - 56, 8, helvetica, BLANCO);
+
+      const xDer = width - 150;
+      paginaAcuse.drawText("NUM. PLANO", { x: xDer, y: height - 24, size: 8, font: helvetica, color: GRIS_CLARO });
+      paginaAcuse.drawText(plano.clave.codigo, { x: xDer, y: height - 37, size: 11, font: helveticaBold, color: BLANCO });
+      paginaAcuse.drawText("VERSIÓN", { x: xDer, y: height - 51, size: 8, font: helvetica, color: GRIS_CLARO });
+      paginaAcuse.drawText(`v${plano.version}`, { x: xDer, y: height - 64, size: 11, font: helveticaBold, color: BLANCO });
+
+      // 2. LÍNEA SEPARADORA dorada
+      paginaAcuse.drawRectangle({
+        x: 0, y: height - 73,
+        width, height: 3,
+        color: DORADO,
+      });
+
+      // 3. SECCIÓN DE DATOS — 3 columnas
+      const fechaFormateada = new Date().toLocaleString("es-MX", {
+        day: "2-digit", month: "long", year: "numeric",
+        hour: "2-digit", minute: "2-digit", hour12: true,
+        timeZone: "America/Merida",
+      });
+      const clienteNombre =
+        plano.clave.proyecto.cliente?.nombre ||
+        plano.clave.proyecto.cliente?.nombreCorto ||
+        "Sin cliente";
+
+      const colX = [40, 240, 440];
+      const yDatos = height - 130;
+
+      const parDato = (x, yTop, l1, v1, l2, v2) => {
+        paginaAcuse.drawText(l1, { x, y: yTop, size: 8, font: helvetica, color: GRIS });
+        paginaAcuse.drawText(v1, { x, y: yTop - 13, size: 10, font: helveticaBold, color: NEGRO });
+        paginaAcuse.drawText(l2, { x, y: yTop - 35, size: 8, font: helvetica, color: GRIS });
+        paginaAcuse.drawText(v2, { x, y: yTop - 48, size: 10, font: helveticaBold, color: NEGRO });
+      };
+
+      parDato(colX[0], yDatos, "PROYECTO", plano.clave.proyecto.nombre, "CLIENTE", clienteNombre);
+      parDato(colX[1], yDatos, "CLAVE", plano.clave.codigo, "VERSIÓN", `v${plano.version}`);
+      parDato(colX[2], yDatos, "FECHA", fechaFormateada, "PÁGINAS", `${pdfDoc.getPageCount() - 1}`);
+
+      // 4. LÍNEA SEPARADORA gris claro
+      let y = yDatos - 70;
+      paginaAcuse.drawLine({
+        start: { x: 40, y }, end: { x: width - 40, y },
+        thickness: 1, color: GRIS_CLARO,
+      });
+
+      // 5. SECCIÓN DESCRIPCIÓN
+      y -= 26;
+      paginaAcuse.drawText("DESCRIPCIÓN", { x: 40, y, size: 9, font: helveticaBold, color: NEGRO });
+      y -= 18;
+
+      const descripcion = plano.clave.descripcion || "Sin descripción.";
       const lineas = [];
       const palabras = descripcion.split(" ");
       let lineaActual = "";
       for (const palabra of palabras) {
-        if ((lineaActual + " " + palabra).length > 80) {
+        if ((lineaActual + " " + palabra).length > 90) {
           lineas.push(lineaActual);
           lineaActual = palabra;
         } else {
@@ -151,80 +219,72 @@ export async function POST(req, { params }) {
 
       lineas.forEach((linea, i) => {
         paginaAcuse.drawText(linea, {
-          x: 160, y: y - (i * 14),
-          size: 9, font: helvetica, color: colorDato,
+          x: 40, y: y - i * 13,
+          size: 9, font: helvetica, color: GRIS_OSCURO,
         });
       });
-      y -= Math.max(20, lineas.length * 14 + 6);
+      y -= lineas.length * 13 + 12;
 
-      escribirCampo("PAGINAS AUTORIZADAS:", `${pdfDoc.getPageCount() - 1} paginas`);
-
-      y -= 10;
+      // 6. LÍNEA SEPARADORA gris claro
       paginaAcuse.drawLine({
-        start: { x: 72, y },
-        end: { x: width - 72, y },
-        thickness: 1,
-        color: rgb(0.898, 0.898, 0.898),
+        start: { x: 40, y }, end: { x: width - 40, y },
+        thickness: 1, color: GRIS_CLARO,
       });
-      y -= 25;
 
-      let firmaImg;
-      try {
-        firmaImg = await pdfDoc.embedPng(firmaBuffer);
-      } catch (errEmbed) {
-        console.error("[autorizar-cliente] embedPng falló", errEmbed);
-        return NextResponse.json({ error: "No se pudo procesar la firma" }, { status: 400 });
-      }
+      // 7. SECCIÓN FIRMA
+      y -= 26;
+      paginaAcuse.drawText("FIRMA DE AUTORIZACIÓN", { x: 40, y, size: 9, font: helveticaBold, color: NEGRO });
 
-      paginaAcuse.drawText("FIRMA DEL CLIENTE:", {
-        x: 72, y, size: 10, font: helveticaBold, color: colorDato,
+      const rectW = 280;
+      const rectH = 130;
+      const rectX = 40;
+      const rectY = y - 12 - rectH;
+
+      paginaAcuse.drawRectangle({
+        x: rectX, y: rectY,
+        width: rectW, height: rectH,
+        borderColor: GRIS_CLARO, borderWidth: 1,
+        color: BLANCO,
       });
-      y -= 90;
 
-      paginaAcuse.drawImage(firmaImg, { x: 72, y, width: 200, height: 80 });
-      y -= 10;
+      const imgW = 220, imgH = 80;
+      paginaAcuse.drawImage(firmaImg, {
+        x: rectX + (rectW - imgW) / 2,
+        y: rectY + 38,
+        width: imgW, height: imgH,
+      });
 
       paginaAcuse.drawLine({
-        start: { x: 72, y },
-        end: { x: 272, y },
-        thickness: 0.5,
-        color: rgb(0.4, 0.4, 0.4),
+        start: { x: rectX + 25, y: rectY + 30 },
+        end: { x: rectX + rectW - 25, y: rectY + 30 },
+        thickness: 1, color: GRIS,
+        dashArray: [3, 3],
       });
-      y -= 18;
 
+      let yf = rectY - 22;
       paginaAcuse.drawText(firmadoPor.trim(), {
-        x: 72, y, size: 11, font: helveticaBold, color: colorDato,
+        x: rectX, y: yf, size: 11, font: helveticaBold, color: NEGRO,
       });
-      y -= 18;
-
-      const fechaFormateada = new Date().toLocaleString("es-MX", {
-        day: "2-digit", month: "long", year: "numeric",
-        hour: "2-digit", minute: "2-digit", hour12: true,
-        timeZone: "America/Merida",
-      });
+      yf -= 17;
       paginaAcuse.drawText(`Fecha: ${fechaFormateada}`, {
-        x: 72, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4),
+        x: rectX, y: yf, size: 9, font: helvetica, color: GRIS,
       });
-      y -= 14;
-
+      yf -= 14;
+      paginaAcuse.drawText(`IP: ${ipCliente}`, {
+        x: rectX, y: yf, size: 8, font: helvetica, color: GRIS,
+      });
+      yf -= 13;
       paginaAcuse.drawText(`PIN del proyecto: ${plano.clave.proyecto.pinAcceso}`, {
-        x: 72, y, size: 9, font: helvetica, color: rgb(0.6, 0.6, 0.6),
+        x: rectX, y: yf, size: 8, font: helvetica, color: GRIS,
       });
 
+      // 8. PIE DE PÁGINA
       paginaAcuse.drawLine({
-        start: { x: 50, y: 60 },
-        end: { x: width - 50, y: 60 },
-        thickness: 0.5,
-        color: rgb(0.898, 0.898, 0.898),
+        start: { x: 40, y: 62 }, end: { x: width - 40, y: 62 },
+        thickness: 0.5, color: GRIS_CLARO,
       });
-      paginaAcuse.drawText("BAUM Industria Carpintera - Documento con valor legal", {
-        x: 50, y: 45, size: 8, font: helvetica,
-        color: rgb(0.6, 0.6, 0.6),
-      });
-      paginaAcuse.drawText("Este documento es confidencial y su alteracion invalida la autorizacion.", {
-        x: 50, y: 32, size: 8, font: helvetica,
-        color: rgb(0.6, 0.6, 0.6),
-      });
+      textoCentrado("BAUM Industria Carpintera · Documento con valor legal", 48, 8, helvetica, GRIS);
+      textoCentrado("Este documento es confidencial y su alteración invalida la autorización.", 36, 7, helvetica, GRIS);
 
       const pdfFirmadoBytes = await pdfDoc.save();
       await mkdir(DIRECTORIO_PLANOS, { recursive: true });
