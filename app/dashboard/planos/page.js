@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
-  Search, ChevronLeft, ChevronRight, ArrowLeft, AlertCircle,
+  Search, ChevronLeft, ChevronRight, AlertCircle,
 } from "lucide-react";
 
 const POR_PAGINA = 10;
@@ -37,13 +37,10 @@ function contarPorStatus(claves) {
   return conteo;
 }
 
-export default function PlanosClientePage() {
+export default function PlanosPage() {
   const { status: sesionStatus } = useSession();
   const router = useRouter();
-  const params = useParams();
-  const clienteId = parseInt(params.clienteId);
 
-  const [cliente, setCliente] = useState(null);
   const [proyectos, setProyectos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
@@ -63,35 +60,31 @@ export default function PlanosClientePage() {
   const cargar = useCallback(async () => {
     setError("");
     try {
-      const [resCliente, resProyectos] = await Promise.all([
-        fetch(`/api/clientes/${clienteId}`),
-        fetch(`/api/proyectos?clienteId=${clienteId}`),
-      ]);
-      if (!resCliente.ok) {
-        const d = await resCliente.json().catch(() => ({}));
-        setError(d.error || "Error al cargar cliente");
+      const res = await fetch("/api/proyectos");
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "Error al cargar datos");
         return;
       }
-      setCliente(await resCliente.json());
-      const dataProy = resProyectos.ok ? await resProyectos.json() : [];
-      setProyectos(Array.isArray(dataProy) ? dataProy : []);
+      const data = await res.json();
+      setProyectos(Array.isArray(data) ? data : []);
     } catch {
       setError("Error de conexión");
     } finally {
       setCargando(false);
     }
-  }, [clienteId]);
+  }, []);
 
   useEffect(() => {
-    if (sesionStatus === "authenticated" && !isNaN(clienteId)) cargar();
-  }, [sesionStatus, clienteId, cargar]);
+    if (sesionStatus === "authenticated") cargar();
+  }, [sesionStatus, cargar]);
 
   useEffect(() => {
     const intervalo = setInterval(() => {
-      if (sesionStatus === "authenticated" && !isNaN(clienteId)) cargar();
-    }, 30000);
+      if (sesionStatus === "authenticated") cargar();
+    }, 300000);
     return () => clearInterval(intervalo);
-  }, [sesionStatus, clienteId, cargar]);
+  }, [sesionStatus, cargar]);
 
   const proyectosConConteo = useMemo(() =>
     proyectos.map((p) => ({ ...p, conteo: contarPorStatus(p.claves || []) })),
@@ -113,7 +106,10 @@ export default function PlanosClientePage() {
   const filtrados = useMemo(() => {
     const termino = busqueda.toLowerCase();
     let lista = termino
-      ? proyectosConConteo.filter((p) => p.nombre.toLowerCase().includes(termino))
+      ? proyectosConConteo.filter((p) => {
+          const cli = (p.cliente?.nombre || p.cliente?.nombreCorto || "").toLowerCase();
+          return p.nombre.toLowerCase().includes(termino) || cli.includes(termino);
+        })
       : proyectosConConteo;
 
     if (filtroEstatus !== "TODOS") lista = lista.filter((p) => p.estatus === filtroEstatus);
@@ -132,55 +128,34 @@ export default function PlanosClientePage() {
   const paginados = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   const totalesTabla = useMemo(() => {
-    let claves = 0, pendJefe = 0, pendCliente = 0, costos = 0, produccion = 0;
+    let claves = 0, produccion = 0;
     for (const p of filtrados) {
-      claves      += (p.claves || []).length;
-      pendJefe    += p.conteo["REVISION_INTERNA"] || 0;
-      pendCliente += p.conteo["ENVIADO"] || 0;
-      costos      += p.conteo["AUTORIZADO"] || 0;
-      produccion  += (p.conteo["LIBERADO"] || 0) + (p.conteo["EN_PRODUCCION"] || 0);
+      claves     += (p.claves || []).length;
+      produccion += (p.conteo["LIBERADO"] || 0) + (p.conteo["EN_PRODUCCION"] || 0);
     }
-    return { claves, pendJefe, pendCliente, costos, produccion };
+    return { claves, produccion };
   }, [filtrados]);
 
   const totalesSemaforo = useMemo(() => {
-    const cols = { pendJefe: {}, pendCliente: {}, costos: {}, produccion: {} };
+    const cols = { pendJefe: {}, pendCliente: {}, costos: {} };
     for (const p of filtrados) {
       for (const c of (p.claves || [])) {
         const color = colorClave(c.updatedAt);
         if (c.estatus === "REVISION_INTERNA") cols.pendJefe[color]    = (cols.pendJefe[color]    || 0) + 1;
         if (c.estatus === "ENVIADO")           cols.pendCliente[color] = (cols.pendCliente[color] || 0) + 1;
         if (c.estatus === "AUTORIZADO")        cols.costos[color]      = (cols.costos[color]      || 0) + 1;
-        if (c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION")
-          cols.produccion[color] = (cols.produccion[color] || 0) + 1;
       }
     }
     return cols;
   }, [filtrados]);
 
-  if (sesionStatus === "loading" || (cargando && proyectos.length === 0 && !cliente)) {
+  if (sesionStatus === "loading" || (cargando && proyectos.length === 0)) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 300 }}>
         <div className="spinner" />
       </div>
     );
   }
-
-  if ((error && !cliente) || (!cargando && !cliente)) {
-    return (
-      <div>
-        <button onClick={() => router.push("/dashboard/proyectos")} style={sBotonVolver}>
-          <ArrowLeft size={15} /> Proyectos
-        </button>
-        <div style={{ padding: 48, textAlign: "center", color: "#6b7280" }}>
-          {error || "Cliente no encontrado"}
-        </div>
-      </div>
-    );
-  }
-
-  const nombreClienteCorto = cliente?.nombreCorto || cliente?.nombre || "Cliente";
-  const nombreClienteCompleto = cliente?.nombre || "Cliente";
 
   const METRICAS_CONFIG = [
     { label: "TOTALES",       valor: metricas.totalClaves, color: "#c9a84c" },
@@ -192,13 +167,10 @@ export default function PlanosClientePage() {
 
   return (
     <div>
-      <button onClick={() => router.push(`/dashboard/proyectos/${clienteId}`)} style={sBotonVolver}>
-        <ArrowLeft size={15} /> {nombreClienteCompleto}
-      </button>
-
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#212121" }}>
-          Planos — {nombreClienteCorto}
+        <div style={{ fontSize: 12, color: "#9ca3af" }}>Sistema de gestión</div>
+        <h1 style={{ margin: "2px 0 0", fontSize: 24, fontWeight: 800, color: "#212121" }}>
+          Centro de Control de Planos
         </h1>
         <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6b7280" }}>
           {filtrados.length} proyecto{filtrados.length !== 1 ? "s" : ""}
@@ -236,7 +208,7 @@ export default function PlanosClientePage() {
             <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af", pointerEvents: "none" }} />
             <input
               type="text"
-              placeholder="Buscar proyecto..."
+              placeholder="Buscar proyecto o cliente..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               style={{ width: "100%", padding: "10px 14px 10px 36px", border: "1px solid #e5e5e5", borderRadius: 8, fontSize: 13, color: "#212121", background: "#ffffff", outline: "none", boxSizing: "border-box" }}
@@ -287,12 +259,12 @@ export default function PlanosClientePage() {
         <>
           {paginados.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 14 }}>
-              {proyectos.length === 0 ? "Este cliente no tiene proyectos." : "No hay proyectos que coincidan con la búsqueda."}
+              {proyectos.length === 0 ? "No hay proyectos registrados." : "No hay proyectos que coincidan con la búsqueda."}
             </div>
           ) : (
             <div>
               {paginados.map((p) => (
-                <CardProyecto key={p.id} proyecto={p} onClick={() => router.push(`/dashboard/proyectos/${clienteId}/planos/${p.id}`)} />
+                <CardProyecto key={p.id} proyecto={p} onClick={() => router.push(`/dashboard/planos/${p.id}`)} />
               ))}
             </div>
           )}
@@ -305,10 +277,11 @@ export default function PlanosClientePage() {
         <>
           <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, overflow: "hidden" }}>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", minWidth: 980, borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#ffffff", borderBottom: "1px solid #e5e5e5" }}>
-                    <th style={{ ...sTh, minWidth: 220 }}>PROYECTO</th>
+                    <th style={{ ...sTh, minWidth: 200 }}>PROYECTO</th>
+                    <th style={{ ...sTh, minWidth: 160 }}>CLIENTE</th>
                     <th style={{ ...sTh, minWidth: 80,  textAlign: "center" }}>CLAVES</th>
                     <th style={{ ...sTh, minWidth: 100, textAlign: "center" }}>PEND. JEFE</th>
                     <th style={{ ...sTh, minWidth: 115, textAlign: "center" }}>PEND. CLIENTE</th>
@@ -317,7 +290,7 @@ export default function PlanosClientePage() {
                     <th style={{ ...sTh, minWidth: 150 }}>PROGRESO</th>
                   </tr>
                   <tr style={{ background: "#f9fafb", borderBottom: "2px solid #e5e5e5" }}>
-                    <td style={{ ...sTotalesCell, paddingLeft: 20 }}>
+                    <td style={{ ...sTotalesCell, paddingLeft: 20 }} colSpan={2}>
                       TOTALES · {filtrados.length} proyecto{filtrados.length !== 1 ? "s" : ""}
                     </td>
                     <td style={{ ...sTotalesCell, textAlign: "center" }}>
@@ -341,13 +314,13 @@ export default function PlanosClientePage() {
                 <tbody>
                   {paginados.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 14 }}>
-                        {proyectos.length === 0 ? "Este cliente no tiene proyectos." : "No hay proyectos que coincidan con la búsqueda."}
+                      <td colSpan={8} style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 14 }}>
+                        {proyectos.length === 0 ? "No hay proyectos registrados." : "No hay proyectos que coincidan con la búsqueda."}
                       </td>
                     </tr>
                   ) : (
                     paginados.map((p) => (
-                      <FilaProyecto key={p.id} proyecto={p} onClick={() => router.push(`/dashboard/proyectos/${clienteId}/planos/${p.id}`)} />
+                      <FilaProyecto key={p.id} proyecto={p} onClick={() => router.push(`/dashboard/planos/${p.id}`)} />
                     ))
                   )}
                 </tbody>
@@ -452,6 +425,7 @@ function CeldaSemTotales({ mapa, horizontal = false }) {
 function FilaProyecto({ proyecto, onClick }) {
   const [hov, setHov] = useState(false);
   const est = ESTATUS_PROYECTO[proyecto.estatus] || { color: "#374151", bg: "#f3f4f6", label: proyecto.estatus };
+  const cli = proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente";
   const claves = proyecto.claves || [];
   const totalClaves = claves.length;
   const completadas = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
@@ -475,6 +449,9 @@ function FilaProyecto({ proyecto, onClick }) {
             {est.label}
           </span>
         </div>
+      </td>
+      <td style={sTd}>
+        <span style={{ fontSize: 13, color: "#6b7280" }}>{cli}</span>
       </td>
       <td style={{ ...sTd, textAlign: "center" }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: totalClaves > 0 ? "#212121" : "#d1d5db" }}>
@@ -508,6 +485,7 @@ function FilaProyecto({ proyecto, onClick }) {
 
 function CardProyecto({ proyecto, onClick }) {
   const est = ESTATUS_PROYECTO[proyecto.estatus] || { color: "#374151", bg: "#f3f4f6", label: proyecto.estatus };
+  const cli = proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente";
   const claves = proyecto.claves || [];
   const totalClaves = claves.length;
   const completadas = claves.filter((c) => c.estatus === "LIBERADO" || c.estatus === "EN_PRODUCCION").length;
@@ -537,7 +515,7 @@ function CardProyecto({ proyecto, onClick }) {
         cursor: onClick ? "pointer" : "default",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
         <span style={{ fontSize: 16, fontWeight: 600, color: "#212121", wordBreak: "break-word" }}>
           {proyecto.nombre}
         </span>
@@ -545,6 +523,7 @@ function CardProyecto({ proyecto, onClick }) {
           {est.label}
         </span>
       </div>
+      <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>{cli}</div>
 
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>{porcentaje}% Completado</div>
@@ -609,18 +588,3 @@ const sSelect = {
   outline: "none",
   cursor: "pointer",
 };
-
-const sBotonVolver = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  background: "transparent",
-  border: "none",
-  color: "#6b7280",
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: "pointer",
-  padding: "4px 0",
-  marginBottom: 12,
-};
-

@@ -5,9 +5,11 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  FileText,
   FolderOpen,
-  Users,
+  ClipboardList,
   Building2,
+  Users,
   LogOut,
   Menu,
   ChevronRight,
@@ -15,8 +17,10 @@ import {
 
 const navegacion = [
   { href: "/dashboard", label: "Inicio", icono: LayoutDashboard, exacto: true },
+  { href: "/dashboard/planos", label: "Planos", icono: FileText },
   { href: "/dashboard/proyectos", label: "Proyectos", icono: FolderOpen },
-  { href: "/dashboard/clientes", label: "Clientes", icono: Building2 },
+  { href: "/dashboard/ordenes-cambio", label: "Órdenes de cambio", icono: ClipboardList },
+  { href: "/dashboard/clientes", label: "Clientes", icono: Building2, soloAdmin: true },
   { href: "/dashboard/usuarios", label: "Usuarios", icono: Users, soloAdmin: true },
 ];
 

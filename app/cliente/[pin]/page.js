@@ -95,9 +95,9 @@ export default function ClientePage() {
       <main style={{ maxWidth: 980, margin: "0 auto", padding: "28px 16px", display: "flex", flexDirection: "column", gap: 36 }}>
         <Seccion
           titulo={`Pendientes de firma (${pendientes.length})`}
-          color="#f59e0b"
+          color="#dc4f5a"
           vacioMensaje="No tienes planos pendientes de firma ✓"
-          vacioColor="#10b981"
+          vacioColor="#369378"
           items={pendientes}
           esMobil={esMobil}
           render={(c) => (
@@ -118,7 +118,7 @@ export default function ClientePage() {
 
         <Seccion
           titulo={`Autorizados (${autorizados.length})`}
-          color="#10b981"
+          color="#369378"
           vacioMensaje="No hay planos autorizados todavía."
           vacioColor="#6b7280"
           items={autorizados}
@@ -146,7 +146,7 @@ export default function ClientePage() {
 
         <Seccion
           titulo={`En producción (${enProduccion.length})`}
-          color="#3b82f6"
+          color="#dba03a"
           vacioMensaje="No hay planos en producción."
           vacioColor="#6b7280"
           items={enProduccion}

@@ -7,20 +7,11 @@ import {
   Plus, X, Copy, Check, Shuffle, Search, ChevronDown,
 } from "lucide-react";
 
-function colorAvatar(letra) {
-  const c = (letra || "A").toUpperCase().charCodeAt(0);
-  if (c >= 65 && c <= 68) return "#3b82f6";
-  if (c >= 69 && c <= 72) return "#8b5cf6";
-  if (c >= 73 && c <= 76) return "#10b981";
-  if (c >= 77 && c <= 80) return "#f59e0b";
-  if (c >= 81 && c <= 84) return "#ef4444";
-  return "#c9a84c";
-}
-
-function iniciales(nombre) {
-  const palabras = (nombre || "").trim().split(/\s+/);
-  return palabras.slice(0, 2).map((w) => w[0] || "").join("").toUpperCase() || "?";
-}
+const ESTATUS_PROYECTO = {
+  ACTIVO:     { label: "Activo",     background: "#dcfce7", color: "#166534" },
+  PAUSADO:    { label: "Pausado",    background: "#fef9c3", color: "#854d0e" },
+  COMPLETADO: { label: "Completado", background: "#f3f4f6", color: "#374151" },
+};
 
 function generarPin() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -29,28 +20,59 @@ function generarPin() {
 export default function ProyectosPage() {
   const { data: sesion, status: sesionStatus } = useSession();
   const router = useRouter();
-  const [clientes, setClientes] = useState([]);
+  const [proyectos, setProyectos] = useState([]);
   const [gerentes, setGerentes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [modalCrear, setModalCrear] = useState(false);
+  const [clienteIdFiltro, setClienteIdFiltro] = useState(null);
+  const [clienteNombreFiltro, setClienteNombreFiltro] = useState(null);
 
   const rol = sesion?.user?.rol;
   const puedeCrear = rol === "DUENO" || rol === "SUPERADMIN";
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const cid = new URLSearchParams(window.location.search).get("clienteId");
+    setClienteIdFiltro(cid || null);
+  }, []);
+
   const cargar = useCallback(async () => {
     try {
-      const res = await fetch("/api/clientes?incluirInactivos=1");
+      const url = clienteIdFiltro
+        ? `/api/proyectos?clienteId=${clienteIdFiltro}`
+        : "/api/proyectos";
+      const res = await fetch(url);
       const data = await res.json();
-      if (Array.isArray(data)) setClientes(data);
+      if (Array.isArray(data)) setProyectos(data);
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [clienteIdFiltro]);
 
   useEffect(() => {
     if (sesionStatus === "authenticated") cargar();
   }, [sesionStatus, cargar]);
+
+  useEffect(() => {
+    if (!clienteIdFiltro) { setClienteNombreFiltro(null); return; }
+    let cancelado = false;
+    fetch(`/api/clientes/${clienteIdFiltro}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => {
+        if (cancelado || !c) return;
+        setClienteNombreFiltro(c.nombre || c.nombreCorto || null);
+      })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, [clienteIdFiltro]);
+
+  function quitarFiltro() {
+    setClienteIdFiltro(null);
+    setClienteNombreFiltro(null);
+    setCargando(true);
+    router.push("/dashboard/proyectos");
+  }
 
   useEffect(() => {
     if (modalCrear && puedeCrear && gerentes.length === 0) {
@@ -64,20 +86,17 @@ export default function ProyectosPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modalCrear, puedeCrear]);
 
-  const clientesConProyectos = useMemo(
-    () => clientes.filter((c) => (c._count?.proyectos || 0) > 0),
-    [clientes]
-  );
-
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return clientes;
-    return clientes.filter(
-      (c) =>
-        c.nombre.toLowerCase().includes(q) ||
-        (c.nombreCorto || "").toLowerCase().includes(q)
-    );
-  }, [clientes, busqueda]);
+    if (!q) return proyectos;
+    return proyectos.filter((p) => {
+      const cli = p.cliente?.nombre || p.cliente?.nombreCorto || "";
+      return (
+        p.nombre.toLowerCase().includes(q) ||
+        cli.toLowerCase().includes(q)
+      );
+    });
+  }, [proyectos, busqueda]);
 
   if (sesionStatus === "loading" || cargando) {
     return (
@@ -94,7 +113,7 @@ export default function ProyectosPage() {
           <div style={{ fontSize: 12, color: "#9ca3af" }}>Sistema de gestión</div>
           <h1 style={{ margin: "2px 0 0", fontSize: 24, fontWeight: 800, color: "#212121" }}>Proyectos</h1>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6b7280" }}>
-            {clientesConProyectos.length} cliente{clientesConProyectos.length !== 1 ? "s" : ""} con proyectos activos
+            {filtrados.length} proyecto{filtrados.length !== 1 ? "s" : ""}
           </p>
         </div>
         {puedeCrear && (
@@ -107,12 +126,26 @@ export default function ProyectosPage() {
         )}
       </div>
 
+      {clienteIdFiltro && (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize: 13, color: "#92400e" }}>
+          <span>
+            Filtrando por cliente: <strong style={{ fontWeight: 700 }}>{clienteNombreFiltro || "—"}</strong>
+          </span>
+          <button
+            onClick={quitarFiltro}
+            style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "transparent", border: "none", color: "#92400e", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}
+          >
+            <X size={13} /> Ver todos
+          </button>
+        </div>
+      )}
+
       <div style={{ marginBottom: 14 }}>
         <div style={{ position: "relative", maxWidth: 420 }}>
           <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af", pointerEvents: "none" }} />
           <input
             type="text"
-            placeholder="Buscar cliente por nombre o nombre corto..."
+            placeholder="Buscar por proyecto o cliente..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             style={{ width: "100%", padding: "10px 14px 10px 36px", border: "1px solid #e5e5e5", borderRadius: 8, fontSize: 13, color: "#212121", background: "#ffffff", outline: "none", boxSizing: "border-box" }}
@@ -125,25 +158,29 @@ export default function ProyectosPage() {
           <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#ffffff", borderBottom: "1px solid #e5e5e5" }}>
+                <th style={sTh}>PROYECTO</th>
                 <th style={sTh}>CLIENTE</th>
-                <th style={sTh}>NOMBRE CORTO</th>
-                <th style={sTh}>MÓDULOS ACTIVOS</th>
-                <th style={{ ...sTh, textAlign: "center" }}>PROYECTOS ACTIVOS</th>
-                <th style={{ ...sTh, textAlign: "center" }}>ESTADO</th>
+                <th style={{ ...sTh, textAlign: "center" }}>CLAVES ACTIVAS</th>
+                <th style={sTh}>MÓDULOS</th>
+                <th style={{ ...sTh, textAlign: "center" }}>ESTATUS</th>
               </tr>
             </thead>
             <tbody>
               {filtrados.length === 0 ? (
                 <tr>
                   <td colSpan={5} style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 14 }}>
-                    {clientes.length === 0
-                      ? "No hay clientes registrados aún."
-                      : "No hay clientes que coincidan con la búsqueda."}
+                    {proyectos.length === 0
+                      ? "No hay proyectos registrados aún."
+                      : "No hay proyectos que coincidan con la búsqueda."}
                   </td>
                 </tr>
               ) : (
-                filtrados.map((c) => (
-                  <FilaCliente key={c.id} cliente={c} onClick={() => router.push(`/dashboard/proyectos/${c.id}`)} />
+                filtrados.map((p) => (
+                  <FilaProyecto
+                    key={p.id}
+                    proyecto={p}
+                    onClick={() => router.push(`/dashboard/proyectos/${p.id}`)}
+                  />
                 ))
               )}
             </tbody>
@@ -162,12 +199,33 @@ export default function ProyectosPage() {
   );
 }
 
-function FilaCliente({ cliente, onClick }) {
+function BadgeModulo({ texto }) {
+  return (
+    <span style={{
+      display: "inline-block",
+      background: "#f3f4f6",
+      color: "#374151",
+      border: "1px solid #e5e5e5",
+      borderRadius: 4,
+      padding: "2px 8px",
+      fontSize: 11,
+      fontWeight: 500,
+    }}>
+      {texto}
+    </span>
+  );
+}
+
+function FilaProyecto({ proyecto, onClick }) {
   const [hov, setHov] = useState(false);
-  const numProyectos = cliente._count?.proyectos || 0;
-  const ini = iniciales(cliente.nombre);
-  const bgAvatar = colorAvatar(ini[0]);
-  const activo = cliente.activo !== false;
+  const cli = proyecto.cliente?.nombre || proyecto.cliente?.nombreCorto || "Sin cliente";
+  const est = ESTATUS_PROYECTO[proyecto.estatus] || { label: proyecto.estatus, background: "#f3f4f6", color: "#374151" };
+  const numClaves = proyecto._count?.claves ?? (proyecto.claves?.length || 0);
+  const numOrdenes = proyecto._count?.ordenes ?? 0;
+
+  const modulos = [];
+  if (numClaves > 0) modulos.push("Planos");
+  if (numOrdenes > 0) modulos.push("OC");
 
   return (
     <tr
@@ -177,37 +235,28 @@ function FilaCliente({ cliente, onClick }) {
       style={{ background: hov ? "#f9fafb" : "#ffffff", cursor: "pointer", transition: "background 0.1s", borderBottom: "1px solid #f3f4f6" }}
     >
       <td style={{ ...sTd, paddingLeft: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: "50%", background: bgAvatar, color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, letterSpacing: 0.5 }}>
-            {ini}
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#212121" }}>{proyecto.nombre}</span>
+      </td>
+      <td style={sTd}>
+        <span style={{ fontSize: 13, color: "#6b7280" }}>{cli}</span>
+      </td>
+      <td style={{ ...sTd, textAlign: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: numClaves > 0 ? "#212121" : "#d1d5db" }}>
+          {numClaves || "—"}
+        </span>
+      </td>
+      <td style={sTd}>
+        {modulos.length > 0 ? (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {modulos.map((m) => <BadgeModulo key={m} texto={m} />)}
           </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#212121" }}>{cliente.nombre}</span>
-        </div>
-      </td>
-      <td style={sTd}>
-        <span style={{ fontSize: 13, color: "#212121" }}>{cliente.nombreCorto || "—"}</span>
-      </td>
-      <td style={sTd}>
-        {numProyectos > 0 ? (
-          <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 6, background: "#c9a84c", color: "#212121" }}>
-            Planos
-          </span>
         ) : (
           <span style={{ fontSize: 13, color: "#d1d5db" }}>—</span>
         )}
       </td>
       <td style={{ ...sTd, textAlign: "center" }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: numProyectos > 0 ? "#212121" : "#d1d5db" }}>
-          {numProyectos || "—"}
-        </span>
-      </td>
-      <td style={{ ...sTd, textAlign: "center" }}>
-        <span style={{
-          fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 6,
-          background: activo ? "#dcfce7" : "#f3f4f6",
-          color: activo ? "#166534" : "#6b7280",
-        }}>
-          {activo ? "Activo" : "Inactivo"}
+        <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 6, background: est.background, color: est.color }}>
+          {est.label}
         </span>
       </td>
     </tr>

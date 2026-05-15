@@ -281,7 +281,7 @@ export default function ClientesPage() {
                       <td style={sTd}>
                         {numProyectos > 0 ? (
                           <button
-                            onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/proyectos/${c.id}`); }}
+                            onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/proyectos?clienteId=${c.id}`); }}
                             style={{
                               background: "transparent",
                               border: "none",

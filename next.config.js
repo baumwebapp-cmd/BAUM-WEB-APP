@@ -16,7 +16,7 @@ const nextConfig = {
     ],
   },
 
-  serverExternalPackages: ["pdf-lib", "bcryptjs", "nodemailer", "@prisma/client"],
+  serverExternalPackages: ["pdf-lib", "pdfkit", "bcryptjs", "nodemailer", "@prisma/client"],
 
   async headers() {
     return [

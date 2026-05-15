@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   ArrowLeft, Pencil, RefreshCw, Plus, Upload, CheckCircle, X,
-  ExternalLink, FileText, Clock, User, AlertTriangle, Link,
+  ExternalLink, FileText, User, AlertTriangle, Link,
   Settings, Check, Minus,
 } from "lucide-react";
 import { urlPdfPlano } from "@/lib/urlPdf";
@@ -138,7 +138,7 @@ function calcularPipeline(clave, plano) {
 }
 
 export default function ProyectoDetallePage() {
-  const { clienteId, proyectoId } = useParams();
+  const { proyectoId } = useParams();
   const id = proyectoId;
   const router = useRouter();
   const { data: sesion } = useSession();
@@ -191,7 +191,7 @@ export default function ProyectoDetallePage() {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: 300, justifyContent: "center", gap: 16 }}>
       <AlertTriangle size={36} style={{ color: "#ef4444" }} />
       <p style={{ color: "#888888", margin: 0 }}>{error}</p>
-      <button className="btn-secundario" onClick={() => router.push(`/dashboard/planos/${clienteId}`)}>Volver</button>
+      <button className="btn-secundario" onClick={() => router.push(`/dashboard/proyectos/${id}`)}>Volver</button>
     </div>
   );
   if (!proyecto) return null;
@@ -206,7 +206,7 @@ export default function ProyectoDetallePage() {
 
       {/* Barra superior */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={() => router.push(`/dashboard/planos/${clienteId}`)}
+        <button onClick={() => router.push(`/dashboard/proyectos/${id}`)}
           style={{ background: "#ffffff", border: "1px solid #e5e5e5", color: "#555555", borderRadius: 8, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
           <ArrowLeft size={14} /> Volver
         </button>
@@ -215,12 +215,6 @@ export default function ProyectoDetallePage() {
           style={{ background: "#ffffff", border: "1px solid #e5e5e5", color: "#555555", borderRadius: 8, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
           <RefreshCw size={14} /> Actualizar
         </button>
-        {esGerente && (
-          <button onClick={() => router.push(`/dashboard/proyectos/${clienteId}/planos/${id}/historial`)}
-            style={{ background: "#ffffff", border: "1px solid #e5e5e5", color: "#555555", borderRadius: 8, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-            <Clock size={14} /> Historial
-          </button>
-        )}
         {esGerente && (
           <button onClick={() => setModalEditarProyecto(true)}
             style={{ background: "#ffffff", border: "1px solid #e5e5e5", color: "#555555", borderRadius: 8, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>

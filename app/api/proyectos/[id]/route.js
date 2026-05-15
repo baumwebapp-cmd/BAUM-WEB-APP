@@ -22,6 +22,7 @@ const INCLUDE_DETALLE = {
     },
     orderBy: { createdAt: "asc" },
   },
+  _count: { select: { claves: true, ordenes: true } },
 };
 
 export async function GET(req, { params }) {

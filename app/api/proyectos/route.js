@@ -13,6 +13,7 @@ const INCLUDE_PROYECTO = {
   cliente: { select: { id: true, nombre: true, nombreCorto: true } },
   gerentes: { include: { usuario: { select: { id: true, nombre: true, email: true } } } },
   claves: { select: { id: true, estatus: true, codigo: true, updatedAt: true } },
+  _count: { select: { claves: true, ordenes: true } },
 };
 
 export async function GET(req) {
