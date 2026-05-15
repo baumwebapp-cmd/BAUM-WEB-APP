@@ -104,11 +104,11 @@ export default function ClientePage() {
             <CardClave
               key={c.id}
               clave={c}
-              badge={{ texto: "Pendiente de revisión", bg: "#fef9c3", color: "#854d0e" }}
               boton={{
                 texto: "Revisar y firmar",
                 icono: <FileText size={16} />,
-                estilo: { background: "#c9a84c", color: "#212121", border: "none" },
+                color: "#dc4f5a",
+                hover: "rgba(220,79,90,0.05)",
                 onClick: () => c.plano && setModal({ modo: "firmar", clave: c }),
                 disabled: !c.plano,
               }}
@@ -127,7 +127,6 @@ export default function ClientePage() {
             <CardClave
               key={c.id}
               clave={c}
-              badge={{ texto: "Autorizado", bg: "#dcfce7", color: "#166534" }}
               extra={c.plano?.autorizacionCliente?.createdAt && (
                 <div style={{ fontSize: 12, color: "#888888" }}>
                   Autorizado el {formatearFecha(c.plano.autorizacionCliente.createdAt)}
@@ -136,7 +135,8 @@ export default function ClientePage() {
               boton={{
                 texto: "Ver plano",
                 icono: <Eye size={16} />,
-                estilo: { background: "#ffffff", color: "#10b981", border: "2px solid #10b981" },
+                color: "#369378",
+                hover: "rgba(54,147,120,0.05)",
                 onClick: () => c.plano && setModal({ modo: "ver", clave: c }),
                 disabled: !c.plano,
               }}
@@ -155,11 +155,11 @@ export default function ClientePage() {
             <CardClave
               key={c.id}
               clave={c}
-              badge={{ texto: "En producción", bg: "#dbeafe", color: "#1e40af" }}
               boton={{
                 texto: "Ver plano",
                 icono: <Eye size={16} />,
-                estilo: { background: "#ffffff", color: "#3b82f6", border: "2px solid #3b82f6" },
+                color: "#dba03a",
+                hover: "rgba(219,160,58,0.05)",
                 onClick: () => c.plano && setModal({ modo: "ver", clave: c }),
                 disabled: !c.plano,
               }}
@@ -204,7 +204,7 @@ function formatearFecha(fecha) {
 function Seccion({ titulo, color, vacioMensaje, vacioColor, items, render, esMobil }) {
   return (
     <section>
-      <h2 style={{ margin: "0 0 14px", fontSize: 17, fontWeight: 800, color, display: "flex", alignItems: "center", gap: 8 }}>
+      <h2 style={{ margin: "0 0 14px", fontSize: 17, fontWeight: 800, color: "#212121", display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 4, height: 18, background: color, borderRadius: 2, display: "inline-block" }} />
         {titulo}
       </h2>
@@ -221,17 +221,13 @@ function Seccion({ titulo, color, vacioMensaje, vacioColor, items, render, esMob
   );
 }
 
-function CardClave({ clave, badge, boton, extra }) {
+function CardClave({ clave, boton, extra }) {
+  const [hover, setHover] = useState(false);
   return (
     <div style={{ background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#212121", overflowWrap: "break-word", wordBreak: "break-word" }}>
-          {clave.proyectoNombre} — {clave.codigo}
-        </h3>
-        <span style={{ background: badge.bg, color: badge.color, padding: "4px 10px", borderRadius: 99, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>
-          {badge.texto}
-        </span>
-      </div>
+      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#212121", overflowWrap: "break-word", wordBreak: "break-word" }}>
+        {clave.proyectoNombre} — {clave.codigo}
+      </h3>
       <p style={{ margin: 0, fontSize: 13, color: "#555555", lineHeight: 1.55, overflowWrap: "break-word", wordBreak: "break-word" }}>
         {clave.descripcion}
       </p>
@@ -239,14 +235,19 @@ function CardClave({ clave, badge, boton, extra }) {
       <button
         onClick={boton.onClick}
         disabled={boton.disabled}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
         style={{
           marginTop: 4,
-          ...boton.estilo,
-          borderRadius: 10, padding: "12px",
-          fontSize: 14, fontWeight: 700,
+          background: hover && !boton.disabled ? boton.hover : "transparent",
+          border: `2px solid ${boton.color}`,
+          color: boton.color,
+          borderRadius: 8, padding: "10px 20px",
+          fontSize: 14, fontWeight: 600,
           cursor: boton.disabled ? "not-allowed" : "pointer",
           opacity: boton.disabled ? 0.5 : 1,
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          transition: "background 0.15s",
         }}
       >
         {boton.icono} {boton.texto}
