@@ -256,11 +256,11 @@ function CardClave({ clave, boton, extra }) {
   );
 }
 
-function VisorPdf({ pin, planoId, codigo, esMobil }) {
+function VisorPdf({ pin, planoId, codigo, esMobil, tipo = "original" }) {
   return (
     <div style={{ padding: 14, userSelect: "none", WebkitUserSelect: "none" }}>
       <iframe
-        src={`${urlPdfCliente(pin, planoId)}#toolbar=0&navpanes=0&scrollbar=0`}
+        src={`${urlPdfCliente(pin, planoId, { tipo })}#toolbar=0&navpanes=0&scrollbar=0`}
         style={{ width: "100%", height: esMobil ? 400 : 500, border: "none", display: "block" }}
         title={`Plano ${codigo}`}
       />
@@ -279,7 +279,7 @@ function ModalVerPlano({ clave, plano, pin, esMobil, onCerrar }) {
           </div>
           <button onClick={onCerrar} style={sBtnCerrar}>×</button>
         </div>
-        <VisorPdf pin={pin} planoId={plano.id} codigo={clave.codigo} esMobil={esMobil} />
+        <VisorPdf pin={pin} planoId={plano.id} codigo={clave.codigo} esMobil={esMobil} tipo="firmado" />
         <div style={{ padding: "14px 20px", borderTop: "1px solid #f0f0f0", display: "flex", justifyContent: "flex-end" }}>
           <button onClick={onCerrar}
             style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #e5e5e5", background: "#ffffff", color: "#555555", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>

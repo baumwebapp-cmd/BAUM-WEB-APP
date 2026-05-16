@@ -21,6 +21,7 @@ const SELECT_PLANO = {
       cargoFirmante: true,
       createdAt: true,
       comentarios: true,
+      urlPdfFirmado: true,
     },
   },
 };
